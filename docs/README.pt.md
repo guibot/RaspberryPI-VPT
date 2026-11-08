@@ -1,6 +1,6 @@
 > Versão completa em português. [English summary](../README.md)
 
-# GVPI — media server de vídeo com máscaras para o Raspberry Pi 5
+# GVPI — media server de vídeo com máscaras para o Raspberry Pi 4
 
 Um pequeno media server para um ecrã HDMI. Vários vídeos curtos, em loop e sem áudio, são compostos com
 **máscaras PNG**, posição, escala e **corner pin** (perspetiva). Controlas tudo, em tempo real, por uma
@@ -10,7 +10,7 @@ webapp acessível na rede local (telemóvel ou computador).
 - **Painel:** a webapp servida pelo próprio Pi. Fala com o player por WebSocket.
 - **Servidor:** Node.js (Express + ws). Converte os vídeos com ffmpeg e guarda a configuração num JSON.
 
-Testado em: Raspberry Pi 5, Raspberry Pi OS Bookworm 64-bit (labwc/Wayland), Chromium 156, Node.js 18.
+Desenvolvido e testado no Raspberry Pi 5; adaptado ao Raspberry Pi 4 (Bookworm 64-bit, labwc/Wayland, Chromium 156, Node.js 18), ainda por validar com carga real.
 
 ## Como funciona
 
@@ -20,7 +20,7 @@ telemóvel / computador ──(WebSocket + HTTP)──▶ servidor Node (:8080) 
                                           data/config.json + data/media/
 ```
 
-- **Vídeos:** H.264 descodificado em software (o Pi 5 não tem descodificação H.264 por hardware). Como os
+- **Vídeos:** H.264 descodificado em software (o Pi 4 tem descodificação H.264 por hardware, mas o Chromium não a usa aqui). Como os
   vídeos são pequenos (máx. 640×480 ou 800×600), o CPU chega bem.
 - **A máscara define a layer:** o tamanho da máscara dá a caixa da layer e o vídeo encaixa lá dentro em
   *cover*. Trocar de vídeo não muda a máscara. Detalhes e ordem das transformações em
@@ -30,19 +30,19 @@ telemóvel / computador ──(WebSocket + HTTP)──▶ servidor Node (:8080) 
 
 ## Instalação de raiz
 
-Num Raspberry Pi 5 com Raspberry Pi OS Bookworm 64-bit (a versão com ambiente de trabalho) e ligado à rede:
+Num Raspberry Pi 4 com Raspberry Pi OS Bookworm 64-bit (a versão com ambiente de trabalho) e ligado à rede:
 
 ```bash
 # 1. Dependências do sistema
 sudo apt update
 sudo apt install -y nodejs npm ffmpeg chromium curl avahi-daemon
 
-# 2. Código (copia esta pasta para o Pi, por exemplo para ~/video-player-rp5) e dependências Node
-cd ~/video-player-rp5/server
+# 2. Código (copia esta pasta para o Pi, por exemplo para ~/RaspberryPI-VPT) e dependências Node
+cd ~/RaspberryPI-VPT/server
 npm install --omit=dev
 
 # 3. Serviço do servidor (arranca com o Pi; pede sudo uma vez)
-cd ~/video-player-rp5
+cd ~/RaspberryPI-VPT
 deploy/install-service.sh
 
 # 4. (opcional) Abrir o player no ecrã HDMI sempre que o Pi arranca
@@ -103,6 +103,12 @@ convertidos com ffmpeg para H.264 yuv420p, no máximo 640×480 (ou 800×600), ma
 ampliar, fps constante (25 ou 30), sem áudio, `+faststart` e GOP curto sem B-frames (ajuda o loop).
 O HDR passa para SDR. Os PNGs entram diretamente como máscaras.
 
+**Sem conversão:** nas Definições podes desligar *Converter vídeos ao enviar* (por exemplo se já comprimiste e
+redimensionaste no HandBrake). Os vídeos H.264, VP8, VP9 ou AV1 em `.mp4`, `.m4v`, `.mov` ou `.webm` entram tal
+como estão, sem reencodar, o que é instantâneo e sem perdas. Outros formatos (HEVC, `.mkv`, `.avi`...) são
+convertidos na mesma, porque o Chromium não os toca. Neste modo o tamanho e os fps das Definições não se aplicam:
+usa vídeos já no tamanho e fps finais (o ideal é um fps constante, sem áudio é opcional).
+
 As máscaras podem ser formas de qualquer cor sobre fundo **transparente** (modo *Alpha*, o normal), ou
 imagens planas a preto e branco (modo *Luminância*: branco = visível).
 
@@ -115,7 +121,7 @@ O player, que corre no próprio Pi (localhost), não precisa de PIN. O PIN guard
 ## Onde estão os ficheiros
 
 ```
-video-player-rp5/
+RaspberryPI-VPT/
 ├── kiosk                      interruptor do modo kiosk (on / off / status)
 ├── deploy/
 │   ├── install-service.sh     instala/remove o serviço systemd
@@ -147,7 +153,7 @@ Variáveis de ambiente do servidor: `PORT` (por omissão `8080`) e `DATA_DIR` (p
 A configuração são as layers e as definições. Os ficheiros de media são maiores.
 
 ```bash
-cd ~/video-player-rp5
+cd ~/RaspberryPI-VPT
 # só a configuração (pequena)
 cp data/config.json ~/config-$(date +%F).json
 
@@ -216,9 +222,9 @@ node index.js      # arranca o servidor à mão (pára o serviço antes: usa a m
 
 Dependências Node (só três): `express`, `ws` e `qrcode`. O resto são módulos do próprio Node.
 
-### Desempenho medido (Fase 0)
+### Desempenho medido (Fase 0, num Pi 5 — ainda não medido no Pi 4)
 
-A 1920×1080, com vídeos 640×480@30 (1 fundo em ecrã inteiro + vídeos à frente, todos com máscara):
+No Pi 4 a resolução por omissão é 1280×720. Os valores abaixo são do Pi 5, a 1920×1080, com vídeos 640×480@30 (1 fundo em ecrã inteiro + vídeos à frente, todos com máscara):
 
 | Layers | DOM/CSS (usado) | WebGL |
 |---|---|---|

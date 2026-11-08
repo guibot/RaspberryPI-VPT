@@ -73,12 +73,14 @@
     <h2>Definições</h2>
     <label class="field">Resolução de saída
       <select id="set-res">
-        <option value="1920x1080">1920 × 1080</option>
+        <option value="1920x1080">1920 × 1080 (pesado no Pi 4)</option>
         <option value="1280x720">1280 × 720</option>
       </select>
     </label>
     <p class="hint">Ao mudar, as layers mantêm a mesma posição em proporção.</p>
     <h3>Conversão de vídeos</h3>
+    <label class="field check"><input id="set-conv-on" type="checkbox"> Converter vídeos ao enviar</label>
+    <p class="hint">Desligado, os vídeos entram como estão (H.264, VP8, VP9 ou AV1 em .mp4, .m4v, .mov ou .webm), por exemplo já comprimidos no HandBrake. Outros formatos são convertidos na mesma.</p>
     <label class="field">Tamanho máximo
       <select id="set-conv-size"><option value="640x480">640 × 480</option><option value="800x600">800 × 600</option></select>
     </label>

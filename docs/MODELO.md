@@ -9,7 +9,7 @@ e `server/lib/config.js` (gravação em disco). O player desenha em `public/play
 {
   "version": 1,
   "rev": 42,
-  "output": { "width": 1920, "height": 1080 },
+  "output": { "width": 1280, "height": 720 },
   "pinHash": "",
   "layers": [ { "...": "ver abaixo" } ]
 }
@@ -19,7 +19,7 @@ e `server/lib/config.js` (gravação em disco). O player desenha em `public/play
 |---|---|
 | `version` | Versão do formato (para migrações futuras). |
 | `rev` | Sobe a cada alteração. Serve para os clientes saberem se estão atualizados. |
-| `output` | Resolução de saída: só `1920×1080` ou `1280×720`. Outro valor volta a 1920×1080. |
+| `output` | Resolução de saída: só `1920×1080` ou `1280×720`. Outro valor volta a 1280×720 (por omissão no Pi 4). |
 | `pinHash` | Hash scrypt com sal do PIN (4 a 8 dígitos). Vazio = sem PIN. **Nunca é enviado aos clientes**; estes recebem apenas `hasPin`. |
 | `layers` | Lista **da de baixo para a de cima**: índice 0 = fundo, último = topo (é o z-index). Máximo 32. |
 

@@ -192,16 +192,18 @@
   }
 
   // ---------- estatísticas para o painel (só medem enquanto um painel pedir) ----------
-  // FPS = ritmo de composição do ecrã; perdidos = frames de vídeo descartados pelo browser.
-  let repTimer = null, repRaf = 0, repFrames = 0, repT0 = 0, dropHist = [];
+  // FPS = frames de vídeo apresentados por segundo (média por layer), medidos com requestVideoFrameCallback.
+  // Não se usa requestAnimationFrame: obrigaria o Chromium a compor o ecrã a 60 fps só para medir.
+  // perdidos = frames de vídeo descartados pelo browser.
+  let repTimer = null, repT0 = 0, repLast = 0, dropHist = [];
+  const shownFrames = () => { let n = 0; for (const L of layers.values()) n += L.frames; return n; };
   function setReporting(on) {
     if (on === !!repTimer) return;
-    if (!on) { clearInterval(repTimer); repTimer = null; cancelAnimationFrame(repRaf); return; }
-    repFrames = 0; repT0 = performance.now(); dropHist = [];
-    const raf = () => { repFrames++; repRaf = requestAnimationFrame(raf); };
-    repRaf = requestAnimationFrame(raf);
+    if (!on) { clearInterval(repTimer); repTimer = null; return; }
+    repT0 = performance.now(); repLast = shownFrames(); dropHist = [];
     repTimer = setInterval(() => {
-      const now = performance.now(), fps = repFrames / ((now - repT0) / 1000); repFrames = 0; repT0 = now;
+      const now = performance.now(), shown = shownFrames();
+      const fps = layers.size ? Math.max(0, shown - repLast) / ((now - repT0) / 1000) / layers.size : 0; repLast = shown; repT0 = now;
       let dropped = 0, total = 0;
       for (const L of layers.values()) for (const v of L.videos) { const q = v.getVideoPlaybackQuality(); dropped += q.droppedVideoFrames; total += q.totalVideoFrames; }
       dropHist.push(dropped); if (dropHist.length > 11) dropHist.shift();

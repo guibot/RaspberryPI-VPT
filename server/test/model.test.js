@@ -7,7 +7,7 @@ const base = () => normalize({});
 
 test('configuração vazia fica com valores por defeito', () => {
   const c = base();
-  assert.deepEqual(c.output, { width: 1920, height: 1080 });
+  assert.deepEqual(c.output, { width: 1280, height: 720 });
   assert.equal(c.layers.length, 0);
   assert.equal(c.pinHash, '');
   assert.equal(c.rev, 0);
@@ -16,7 +16,7 @@ test('configuração vazia fica com valores por defeito', () => {
 test('layer nova: defaults, centrada no ecrã, 4 pins a zero', () => {
   const c = applyOp(base(), { op: 'addLayer' });
   const l = c.layers[0];
-  assert.equal(l.x, 960); assert.equal(l.y, 540);
+  assert.equal(l.x, 640); assert.equal(l.y, 360);
   assert.equal(l.scale, 1); assert.equal(l.maskMode, 'alpha'); assert.equal(l.visible, true);
   assert.equal(l.pins.length, 4);
   assert.ok(l.pins.every(p => p.x === 0 && p.y === 0));
@@ -27,7 +27,7 @@ test('valores fora dos limites são cortados e lixo é substituído por defaults
   const c = normalize({ layers: [{ id: 'a', scale: 9999, maskScale: -5, x: 'abc', videoOffsetX: Infinity, maskMode: 'xpto',
     pins: [{ x: 1e9, y: -1e9 }] }] });
   const l = c.layers[0];
-  assert.equal(l.scale, 20); assert.equal(l.maskScale, 0.01); assert.equal(l.x, 960);
+  assert.equal(l.scale, 20); assert.equal(l.maskScale, 0.01); assert.equal(l.x, 640);
   assert.equal(l.videoOffsetX, 0); assert.equal(l.maskMode, 'alpha');
   assert.equal(l.pins[0].x, 3000); assert.equal(l.pins[0].y, -3000);
   assert.equal(l.pins[3].x, 0);
@@ -39,10 +39,10 @@ test('nomes de ficheiro com caminhos são rejeitados (sem path traversal)', () =
   assert.equal(l[1].video, null); assert.equal(l[1].mask, 'ok.png');
 });
 
-test('ids duplicados são removidos; resolução inválida volta a 1920x1080', () => {
+test('ids duplicados são removidos; resolução inválida volta a 1280x720', () => {
   const c = normalize({ output: { width: 800, height: 600 }, layers: [{ id: 'a' }, { id: 'a' }, { id: 'b' }] });
   assert.deepEqual(c.layers.map(l => l.id), ['a', 'b']);
-  assert.deepEqual(c.output, { width: 1920, height: 1080 });
+  assert.deepEqual(c.output, { width: 1280, height: 720 });
 });
 
 test('máximo de layers', () => {
@@ -92,7 +92,8 @@ test('updateLayer: só altera campos permitidos e nunca o id', () => {
 });
 
 test('mudar para 720p mantém a composição em proporção', () => {
-  let c = applyOp(base(), { op: 'addLayer', layer: { x: 960, y: 540, scale: 3, pins: [{ x: 30, y: 60 }] } });
+  let c = applyOp(base(), { op: 'setOutput', width: 1920, height: 1080 });
+  c = applyOp(c, { op: 'addLayer', layer: { x: 960, y: 540, scale: 3, pins: [{ x: 30, y: 60 }] } });
   c = applyOp(c, { op: 'setOutput', width: 1280, height: 720 });
   const l = c.layers[0];
   assert.deepEqual(c.output, { width: 1280, height: 720 });
@@ -119,4 +120,14 @@ test('PIN: validação, hash com sal, verificação e nunca exposto', () => {
 test('operações inválidas lançam OpError', () => {
   assert.throws(() => applyOp(base(), null), OpError);
   assert.throws(() => applyOp(base(), { op: 'fazerCafe' }), OpError);
+});
+
+test('conversão de vídeos: ligada por defeito e pode ser desligada', () => {
+  let c = base();
+  assert.equal(c.convert.process, true);
+  c = applyOp(c, { op: 'setConvert', width: 800, height: 600, fps: 25, process: false });
+  assert.deepEqual(c.convert, { maxWidth: 800, maxHeight: 600, fps: 25, process: false });
+  assert.equal(normalize(c).convert.process, false);
+  c = applyOp(c, { op: 'setConvert', width: 640, height: 480, fps: 30 });
+  assert.equal(c.convert.process, true);
 });

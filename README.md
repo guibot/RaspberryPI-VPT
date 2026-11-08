@@ -1,6 +1,6 @@
 # Raspberry Pi Video Projection Tool
 
-A small video-mapping media server for the **Raspberry Pi 5**. It plays several short looping videos on an HDMI
+A small video-mapping media server for the **Raspberry Pi 4**. It plays several short looping videos on an HDMI
 screen, each one with a **PNG mask**, position, scale and **corner pin**, and you control everything live from a
 web panel on your phone or computer.
 
@@ -15,11 +15,11 @@ never changes the mask. Details in [`docs/MODELO.md`](docs/MODELO.md).
 
 ## Install
 
-Raspberry Pi 5, Raspberry Pi OS Bookworm 64-bit (desktop), on your network:
+Raspberry Pi 4, Raspberry Pi OS Bookworm 64-bit (desktop), on your network:
 
 ```bash
 sudo apt update && sudo apt install -y nodejs npm ffmpeg chromium curl avahi-daemon
-cd video-player-rp5/server && npm install --omit=dev
+cd RaspberryPI-VPT/server && npm install --omit=dev
 cd .. && deploy/install-service.sh      # starts the server now and on every boot
 ./kiosk on                              # optional: open the player fullscreen at boot
 ```
@@ -34,7 +34,7 @@ when there are no layers.
 - **Preview**: drag a layer to move it, drag its 4 handles for the corner pin.
 - **Media**: upload videos and PNGs (phone gallery or drag and drop). Videos are converted automatically
   (H.264, max 640×480 or 800×600, constant fps, no audio, HDR to SDR). PNGs become masks.
-- **Settings**: output resolution (1920×1080 or 1280×720), conversion size and fps, optional PIN.
+- **Settings**: output resolution (1920×1080 or 1280×720), conversion size and fps, an option to skip conversion (keep videos as uploaded, e.g. already compressed with HandBrake), optional PIN.
 - **Debug**: live FPS, dropped frames, CPU, GPU and temperature.
 
 There is **no PIN by default**: anyone on your network can control the screen. Set one in Settings.
@@ -76,5 +76,6 @@ cd server && npm install && npm test    # 25 tests
 Layout: `server/` (Node server), `public/player/`, `public/panel/`, `public/shared/geometry.js` (used by both),
 `deploy/` (service and kiosk scripts), `docs/`, `phase0/` (DOM vs WebGL benchmarks).
 
-On the Pi 5 at 1920×1080 with 640×480@30 videos, 8 masked layers use about 26% CPU and 33% GPU with the DOM
-approach (WebGL was heavier), with no throttling.
+Default output is 1280×720 on the Pi 4 (1920×1080 is selectable but heavier). The performance numbers measured
+in `phase0/` were taken on a Pi 5; they have not been re-measured on the Pi 4 yet, so use **Debug** to check CPU and
+temperature with your own layer count.

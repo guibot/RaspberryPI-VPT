@@ -2,7 +2,7 @@
   "name": "video-mask-server",
   "version": "0.1.0",
   "private": true,
-  "description": "Media server de vídeo com máscaras para Raspberry Pi 5",
+  "description": "Media server de vídeo com máscaras para Raspberry Pi 4",
   "main": "index.js",
   "scripts": { "start": "node index.js",
     "test": "node --test test/" },
