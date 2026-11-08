@@ -1,10 +1,8 @@
-# GVPI
+# Raspberry Pi Video Projection Tool
 
 A small video-mapping media server for the **Raspberry Pi 5**. It plays several short looping videos on an HDMI
 screen, each one with a **PNG mask**, position, scale and **corner pin**, and you control everything live from a
 web panel on your phone or computer.
-
-> Versão completa em português: [`docs/README.pt.md`](docs/README.pt.md)
 
 ## How it works
 
