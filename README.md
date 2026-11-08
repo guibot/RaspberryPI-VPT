@@ -4,10 +4,10 @@ Video Projection Tools for the **Raspberry Pi 5**, there's also a branch adapted
 
 <img src="docs/rpivpt2.jpeg" width="600">
 
-It plays multiple videos, each one with an optional **PNG mask**.
-For each video, there's the possibility to set position, scale and **corner pin**.
+Plays multiple videos, each one with an optional **PNG mask**.
+For each video, position, scale and **corner pin** controls.
 
-With full control live from a web panel on your phone or computer.
+With full live control from a web panel on your phone or computer.
 
 Project is under development, some polishment is needed.
 
