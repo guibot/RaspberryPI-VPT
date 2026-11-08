@@ -1,0 +1,255 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Fase 0 - teste de composição</title>
+<style>
+  html,body{margin:0;width:100%;height:100%;background:#000;overflow:hidden;cursor:none}
+  #stage{position:absolute;left:0;top:0;width:100%;height:100%;overflow:hidden}
+  .layer{position:absolute;left:0;top:0;transform-origin:0 0;
+    -webkit-mask-repeat:no-repeat;mask-repeat:no-repeat;
+    -webkit-mask-size:100% 100%;mask-size:100% 100%;will-change:transform}
+  .layer video{display:block;width:100%;height:100%;object-fit:fill}
+  .layer.bg video{object-fit:cover}
+  #hud{position:fixed;left:8px;top:8px;z-index:9;font:600 22px/1.3 monospace;color:#0f0;background:rgba(0,0,0,.65);padding:4px 10px;border-radius:6px;white-space:pre}
+  canvas{position:absolute;left:0;top:0;width:100%;height:100%}
+  /* No modo WebGL os <video> existem mas não são visíveis */
+  .hidden-video{position:absolute;left:0;top:0;width:2px;height:2px;opacity:.01;pointer-events:none}
+</style>
+<div id="stage"></div>
+<div id="hud"></div>
+<script type="module">
+// espera que o viewport coincida com o ecrã (o Chromium demora a entrar em ecrã inteiro)
+await new Promise(res => { const t0 = performance.now();
+  const chk = () => (innerWidth === screen.width && innerHeight === screen.height) || performance.now() - t0 > 10000 ? res() : setTimeout(chk, 100); chk(); });
+const q = new URLSearchParams(location.search);
+const MODE = q.get('mode') || 'dom';            // dom | webgl
+const N    = +(q.get('n') || 4);
+const VID  = q.get('vid') || '640x480_30fps';
+const MASK = q.get('mask') || 'mask_circle.png';
+const WARM = +(q.get('warm') || 8);             // s de aquecimento (não medidos)
+const DUR  = +(q.get('dur') || 120);            // s medidos
+const TAG  = q.get('tag') || `${MODE}-${N}`;
+const W = innerWidth, H = innerHeight;
+const stage = document.getElementById('stage');
+const [vw, vh] = VID.split('_')[0].split('x').map(Number);
+const FPS = +VID.match(/_(\d+)fps/)[1];
+
+// ---------- geometria: N layers numa grelha, com corner pin ----------
+function rng(seed){ let s = seed; return () => (s = (s*1664525 + 1013904223) >>> 0) / 4294967296; }
+const LAYOUT = q.get('layout') || 'grid';
+const layers = [];
+if (LAYOUT === 'bg') {
+  // layer 0: fundo em ecrã inteiro (sem corner pin); layers 1..N-1: primeiro plano com corner pin
+  layers.push({ i: 0, bg: true, bw: W, bh: H, dst: [[0,0],[W,0],[W,H],[0,H]] });
+  const fg = N - 1, cols = fg <= 3 ? fg : 4, rows = Math.ceil(fg / cols);
+  const cellW = W / cols, cellH = H / rows;
+  const sc = Math.min(cellW / vw, cellH / vh, 1.4) * 0.95;
+  const bw = vw * sc, bh = vh * sc;
+  for (let k = 0; k < fg; k++) {
+    const r = rng(k + 1);
+    const cx = (k % cols + .5) * cellW, cy = (Math.floor(k / cols) + .5) * cellH;
+    const x0 = cx - bw/2, y0 = cy - bh/2;
+    const j = () => (r() - .5) * 0.10 * Math.min(bw, bh);
+    layers.push({ i: k + 1, bw, bh, dst: [[x0+j(), y0+j()], [x0+bw+j(), y0+j()], [x0+bw+j(), y0+bh+j()], [x0+j(), y0+bh+j()]] });
+  }
+} else {
+  const cols = N <= 4 ? 2 : 4, rows = Math.ceil(N / cols);
+  const cellW = W / cols, cellH = H / rows;
+  const sc = Math.min(cellW / vw, cellH / vh) * 1.15;
+  const bw = vw * sc, bh = vh * sc;
+  for (let i = 0; i < N; i++) {
+    const r = rng(i + 1);
+    const cx = (i % cols + .5) * cellW, cy = (Math.floor(i / cols) + .5) * cellH;
+    const x0 = cx - bw/2, y0 = cy - bh/2;
+    const j = () => (r() - .5) * 0.10 * Math.min(bw, bh);
+    layers.push({ i, bw, bh, dst: [[x0+j(), y0+j()], [x0+bw+j(), y0+j()], [x0+bw+j(), y0+bh+j()], [x0+j(), y0+bh+j()]] });
+  }
+}
+
+// ---------- homografia (rect local -> quadrilátero no ecrã) ----------
+function homography(w, h, dst) {
+  const src = [[0,0],[w,0],[w,h],[0,h]];
+  const A = [];
+  for (let k = 0; k < 4; k++) {
+    const [x,y] = src[k], [X,Y] = dst[k];
+    A.push([x,y,1,0,0,0,-x*X,-y*X,X]);
+    A.push([0,0,0,x,y,1,-x*Y,-y*Y,Y]);
+  }
+  for (let c = 0; c < 8; c++) {                          // eliminação de Gauss
+    let p = c; for (let r = c+1; r < 8; r++) if (Math.abs(A[r][c]) > Math.abs(A[p][c])) p = r;
+    [A[c], A[p]] = [A[p], A[c]];
+    for (let r = 0; r < 8; r++) if (r !== c) {
+      const f = A[r][c] / A[c][c];
+      for (let k = c; k < 9; k++) A[r][k] -= f * A[c][k];
+    }
+  }
+  const s = A.map((row,i) => row[8] / row[i]);
+  return [s[0],s[1],s[2], s[3],s[4],s[5], s[6],s[7],1];   // linha a linha
+}
+function inv3(m){
+  const [a,b,c,d,e,f,g,h,i] = m;
+  const A=e*i-f*h, B=-(d*i-f*g), C=d*h-e*g, det=a*A+b*B+c*C;
+  return [A,-(b*i-c*h),b*f-c*e, B,a*i-c*g,-(a*f-c*d), C,-(a*h-b*g),a*e-b*d].map(v=>v/det);
+}
+
+// ---------- vídeos ----------
+const stats = layers.map(() => ({ rvfc: 0, overwritten: 0, presented: 0 }));
+const videos = layers.map(L => {
+  const v = document.createElement('video');
+  v.src = `assets/test_${VID}.mp4`;
+  v.loop = true; v.muted = true; v.playsInline = true; v.preload = 'auto';
+  v.addEventListener('loadedmetadata', () => { v.currentTime = (L.i * 0.9) % Math.max(1, v.duration - 1); }, { once: true });
+  return v;
+});
+
+// ---------- modo DOM ----------
+function setupDOM() {
+  layers.forEach((L, i) => {
+    const d = document.createElement('div');
+    d.className = 'layer' + (L.bg ? ' bg' : '');
+    d.style.width = L.bw + 'px'; d.style.height = L.bh + 'px';
+    d.style.webkitMaskImage = d.style.maskImage = `url(assets/${MASK})`;
+    const m = homography(L.bw, L.bh, L.dst);
+    // matrix3d é coluna-a-coluna: [a d 0 g, b e 0 h, 0 0 1 0, c f 0 1]
+    d.style.transform = `matrix3d(${m[0]},${m[3]},0,${m[6]},${m[1]},${m[4]},0,${m[7]},0,0,1,0,${m[2]},${m[5]},0,1)`;
+    d.appendChild(videos[i]);
+    stage.appendChild(d);
+  });
+}
+
+// ---------- modo WebGL ----------
+let gl, draw = () => {}, dirty = [];
+function setupGL() {
+  const c = document.createElement('canvas');
+  c.width = W; c.height = H;
+  stage.appendChild(c);
+  gl = c.getContext('webgl', { antialias: false, alpha: false, powerPreference: 'high-performance' });
+  const dbg = gl.getExtension('WEBGL_debug_renderer_info');
+  window.__gpu = dbg ? gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) : 'n/d';
+  const sh = (t, s) => { const o = gl.createShader(t); gl.shaderSource(o, s); gl.compileShader(o);
+    if (!gl.getShaderParameter(o, gl.COMPILE_STATUS)) throw gl.getShaderInfoLog(o); return o; };
+  const p = gl.createProgram();
+  gl.attachShader(p, sh(gl.VERTEX_SHADER, `
+    attribute vec2 a; uniform vec2 res;
+    void main(){ gl_Position = vec4(a.x/res.x*2.-1., 1.-a.y/res.y*2., 0., 1.); }`));
+  gl.attachShader(p, sh(gl.FRAGMENT_SHADER, `
+    precision highp float;
+    uniform sampler2D vid, msk; uniform mat3 inv; uniform vec2 box, res, vs;
+    void main(){
+      vec3 q = inv * vec3(gl_FragCoord.x, res.y - gl_FragCoord.y, 1.);
+      vec2 uv = q.xy / q.z / box;
+      float m = texture2D(msk, uv).a;
+      gl_FragColor = vec4(texture2D(vid, (uv - .5) * vs + .5).rgb * m, m);   // pré-multiplicado
+    }`));
+  gl.linkProgram(p); gl.useProgram(p);
+  const buf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+  const loc = gl.getAttribLocation(p, 'a'); gl.enableVertexAttribArray(loc);
+  gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+  gl.uniform2f(gl.getUniformLocation(p, 'res'), W, H);
+  gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+  const uInv = gl.getUniformLocation(p, 'inv'), uBox = gl.getUniformLocation(p, 'box'), uVs = gl.getUniformLocation(p, 'vs');
+  gl.uniform1i(gl.getUniformLocation(p, 'vid'), 0); gl.uniform1i(gl.getUniformLocation(p, 'msk'), 1);
+  const mkTex = unit => { const t = gl.createTexture(); gl.activeTexture(gl.TEXTURE0 + unit);
+    gl.bindTexture(gl.TEXTURE_2D, t);
+    for (const [k,v] of [[gl.TEXTURE_MIN_FILTER,gl.LINEAR],[gl.TEXTURE_MAG_FILTER,gl.LINEAR],
+      [gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE],[gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE]]) gl.texParameteri(gl.TEXTURE_2D,k,v);
+    return t; };
+  const maskImg = new Image(); maskImg.src = `assets/${MASK}`;
+  const vtex = [], mtex = [];
+  layers.forEach((L, i) => {
+    vtex[i] = mkTex(0);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(4));
+    mtex[i] = mkTex(1);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(4));
+    L.inv = new Float32Array(inv3(homography(L.bw, L.bh, L.dst)));
+    L.verts = new Float32Array([...L.dst[0], ...L.dst[1], ...L.dst[2], ...L.dst[0], ...L.dst[2], ...L.dst[3]]);
+    dirty[i] = false;
+  });
+  maskImg.decode().then(() => layers.forEach((L, i) => {
+    gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, mtex[i]);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, maskImg);
+  }));
+  window.__draws = 0;
+  draw = () => {
+    if (!dirty.some(Boolean)) return;
+    gl.clearColor(0,0,0,1); gl.clear(gl.COLOR_BUFFER_BIT);
+    layers.forEach((L, i) => {
+      gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, vtex[i]);
+      if (dirty[i] && videos[i].readyState >= 2) { gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, videos[i]); dirty[i] = false; }
+      gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, mtex[i]);
+      gl.bufferData(gl.ARRAY_BUFFER, L.verts, gl.DYNAMIC_DRAW);
+      gl.uniformMatrix3fv(uInv, false, L.inv.map((_, k) => L.inv[(k%3)*3 + (k/3|0)]));  // transposta (row->column major)
+      gl.uniform2f(uBox, L.bw, L.bh);
+      const bAR = L.bw / L.bh, vAR = vw / vh;
+      if (L.bg) gl.uniform2f(uVs, bAR > vAR ? 1 : bAR / vAR, bAR > vAR ? vAR / bAR : 1); else gl.uniform2f(uVs, 1, 1);
+      gl.drawArrays(gl.TRIANGLES, 0, 6);
+    });
+    window.__draws++;
+  };
+  videos.forEach((v, i) => { v.className = 'hidden-video'; stage.appendChild(v); });
+}
+
+// ---------- arranque ----------
+if (MODE === 'dom') setupDOM(); else setupGL();
+videos.forEach((v, i) => {
+  const cb = (_n, meta) => { stats[i].rvfc++; stats[i].presented = meta.presentedFrames; if (MODE === 'webgl') { if (dirty[i]) stats[i].overwritten++; dirty[i] = true; }
+    v.requestVideoFrameCallback(cb); };
+  v.requestVideoFrameCallback(cb);
+  v.play().catch(e => console.log('play falhou', e));
+});
+
+// ---------- medição ----------
+const ft = [];                // duração de cada frame de rAF (ms) durante a janela medida
+let phase = 'warm', t0 = performance.now(), last = t0, base = null;
+const quality = () => videos.map(v => { const q = v.getVideoPlaybackQuality(); return { total: q.totalVideoFrames, dropped: q.droppedVideoFrames }; });
+const post = (path, body) => fetch(path, { method: 'POST', body: JSON.stringify(body) }).catch(() => {});
+
+const hud = document.getElementById('hud');
+let errs = '';
+addEventListener('error', e => errs += '\n' + e.message);
+addEventListener('unhandledrejection', e => errs += '\n' + (e.reason && e.reason.message || e.reason));
+let hudT = performance.now(), hudF = 0, hudP = 0;
+setInterval(async () => {
+  if (q.get('hud') === '0') { hud.style.display = 'none'; return; }
+  const now = performance.now(), dtS = (now - hudT) / 1000; hudT = now;
+  const fps = hudF / dtS; hudF = 0;
+  const pres = stats.reduce((a, x) => a + x.presented, 0), vfps = (pres - hudP) / dtS / Math.max(1, N); hudP = pres;
+  let st = {}; try { st = await (await fetch('/stats')).json(); } catch {}
+  hud.textContent = `${MODE.toUpperCase()}  ${N} vídeos  ${W}x${H}\nFPS ecrã ${fps.toFixed(0)}  |  vídeo ${vfps.toFixed(1)}/layer\nCPU ${st.cpu ?? '-'}%  |  GPU ${st.gpu ?? '-'}%  |  ${st.temp ?? '-'}°C` + errs;
+}, 1000);
+function tick(now) {
+  hudF++;
+  draw();
+  const dt = now - last; last = now;
+  const el = (now - t0) / 1000;
+  if (phase === 'warm' && el >= WARM) {
+    phase = 'measure'; t0 = now; base = { q: quality(), rvfc: stats.map(s => ({ ...s })), draws: window.__draws || 0 };
+    post('/start', { tag: TAG });
+  } else if (phase === 'measure') {
+    ft.push(dt);
+    if (el >= DUR) { phase = 'done'; finish(el); return; }
+  }
+  requestAnimationFrame(tick);
+}
+function finish(el) {
+  const q = quality();
+  const per = q.map((x, i) => ({
+    total: x.total - base.q[i].total, dropped: x.dropped - base.q[i].dropped,
+    rvfc: stats[i].rvfc - base.rvfc[i].rvfc, presented: stats[i].presented - base.rvfc[i].presented, overwritten: stats[i].overwritten - base.rvfc[i].overwritten }));
+  const sorted = [...ft].sort((a, b) => a - b);
+  const pct = p => sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * p))];
+  const expected = FPS * el;
+  post('/result', {
+    tag: TAG, mode: MODE, n: N, vid: VID, w: W, h: H, seconds: +el.toFixed(1), gpu: window.__gpu || null,
+    page_fps: +(ft.length / el).toFixed(2), frame_ms_p99: +pct(.99).toFixed(1), frame_ms_max: +sorted.at(-1).toFixed(1),
+    stutters: ft.filter(x => x > 1.5 * pct(.5)).length, frame_ms_median: +pct(.5).toFixed(1),
+    draws_per_s: MODE === 'webgl' ? +((window.__draws - base.draws) / el).toFixed(1) : null,
+    expected_video_frames: Math.round(expected),
+    dropped_total: per.reduce((a, x) => a + x.dropped, 0),
+    dropped_pct: +(100 * per.reduce((a, x) => a + x.dropped, 0) / per.reduce((a, x) => a + x.total, 0)).toFixed(2),
+    presented_min_pct: +(100 * Math.min(...per.map(x => x.presented)) / expected).toFixed(1),
+    overwritten_total: per.reduce((a, x) => a + x.overwritten, 0),
+    per_video: per,
+  });
+}
+requestAnimationFrame(t => { t0 = last = t; requestAnimationFrame(tick); });
+</script>

@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="pt">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="google" content="notranslate">
+<meta name="theme-color" content="#0e1116">
+<title>Painel de vídeo</title>
+<link rel="stylesheet" href="panel.css">
+</head>
+<body data-tab="layers">
+
+<div id="login" hidden>
+  <form id="login-form" autocomplete="off">
+    <h1>Painel de vídeo</h1>
+    <p>Introduz o PIN</p>
+    <input id="login-pin" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="8" autocomplete="current-password" aria-label="PIN" autofocus>
+    <button type="submit" class="primary">Entrar</button>
+    <p id="login-msg" class="msg" role="alert"></p>
+  </form>
+</div>
+
+<div id="app" hidden>
+  <header>
+    <span class="logo">GVPI</span>
+    <span id="status" class="status" title="Estado da ligação"><i></i><span>a ligar</span></span>
+    <span class="spacer"></span>
+    <button id="btn-debug" class="ghost" aria-pressed="false" title="Mostrar informação de debug">Debug</button>
+    <button id="btn-media" class="ghost">Media <b id="jobs-badge" class="badge" hidden></b></button>
+    <button id="btn-settings" class="ghost" aria-label="Definições">Definições</button>
+  </header>
+
+  <main>
+    <section id="col-layers" aria-label="Layers">
+      <div class="bar"><h2>Layers</h2><button id="btn-add" class="primary">+ Layer</button></div>
+      <ul id="layer-list"></ul>
+    </section>
+
+    <section id="col-preview" aria-label="Pré-visualização">
+      <div id="preview-wrap">
+        <div id="debug" hidden aria-live="off"></div>
+        <div id="preview"><div id="pstage"></div></div>
+      </div>
+      <nav id="tabs">
+        <button data-tab="layers" class="on">Layers</button>
+        <button data-tab="props">Ajustes</button>
+      </nav>
+    </section>
+
+    <section id="col-props" aria-label="Propriedades">
+      <div id="props"></div>
+    </section>
+  </main>
+</div>
+
+<dialog id="media-dlg">
+  <div class="dlg-head"><h2>Media</h2><button id="media-close">Fechar</button></div>
+  <div id="dropzone">
+    <p>Arrasta vídeos e PNGs para aqui</p>
+    <label class="btn primary">Escolher ficheiros
+      <input id="file-input" type="file" multiple accept="video/*,image/png,.png,.mov,.mkv,.mp4,.m4v,.webm,.avi,.3gp" hidden>
+    </label>
+    <p class="hint">Os vídeos são convertidos sozinhos (H.264, sem áudio). Uma layer só os pode usar quando a conversão acabar. PNGs servem de máscara.</p>
+  </div>
+  <h3>Em curso</h3>
+  <ul id="queue" class="plain"></ul>
+  <h3>Biblioteca</h3>
+  <ul id="library" class="plain"></ul>
+</dialog>
+
+<dialog id="settings">
+  <form method="dialog">
+    <h2>Definições</h2>
+    <label class="field">Resolução de saída
+      <select id="set-res">
+        <option value="1920x1080">1920 × 1080</option>
+        <option value="1280x720">1280 × 720</option>
+      </select>
+    </label>
+    <p class="hint">Ao mudar, as layers mantêm a mesma posição em proporção.</p>
+    <h3>Conversão de vídeos</h3>
+    <label class="field">Tamanho máximo
+      <select id="set-conv-size"><option value="640x480">640 × 480</option><option value="800x600">800 × 600</option></select>
+    </label>
+    <label class="field">Fotogramas por segundo
+      <select id="set-conv-fps"><option value="25">25</option><option value="30">30</option></select>
+    </label>
+    <p class="hint">Aplica-se aos próximos vídeos enviados.</p>
+    <h3>PIN do painel</h3>
+    <p id="pin-state" class="hint"></p>
+    <label class="field">Novo PIN (4 a 8 dígitos)
+      <input id="set-pin" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="8" autocomplete="new-password">
+    </label>
+    <div class="row-btns">
+      <button type="button" id="btn-pin-save" class="primary">Guardar PIN</button>
+      <button type="button" id="btn-pin-remove">Remover PIN</button>
+    </div>
+    <p id="set-msg" class="msg" role="status"></p>
+    <div class="row-btns end">
+      <button type="button" id="btn-logout">Terminar sessão</button>
+      <button value="close">Fechar</button>
+    </div>
+  </form>
+</dialog>
+
+<div id="toast" role="status" aria-live="polite"></div>
+
+<script src="/shared/geometry.js"></script>
+<script src="panel.js"></script>
+</body>
+</html>

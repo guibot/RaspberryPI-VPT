@@ -1,0 +1,17 @@
+# Dependências
+server/node_modules/
+
+# Os teus dados (vídeos, configuração, hash do PIN, chave das sessões): nunca vão para o git
+/data/
+
+# Ficheiros gerados pelos testes de desempenho (a Fase 0 guarda só os scripts e o resultado final)
+/phase0/assets/
+/phase0/shots/
+/phase0/*.log
+/phase0/smoke*.jsonl
+/phase0/results_old_invalid.jsonl
+
+# Lixo comum
+*.log
+.DS_Store
+*.tmp
