@@ -1,8 +1,15 @@
 # Raspberry Pi Video Projection Tool
 
-A small video-mapping media server for the **Raspberry Pi 5**. It plays several short looping videos on an HDMI
-screen, each one with a **PNG mask**, position, scale and **corner pin**, and you control everything live from a
-web panel on your phone or computer.
+Video Projection Tools for the **Raspberry Pi 5**, there's also a branch adapted to RPI4.
+
+<img src="docs/img/vid.gif" width="600">
+
+It plays multiple videos, each one with an optional **PNG mask**.
+For each video, there's the possibility to set position, scale and **corner pin**.
+
+With full control live from a web panel on your phone or computer.
+
+Project is under development, some polishment is needed.
 
 ## How it works
 
@@ -25,8 +32,8 @@ cd .. && deploy/install-service.sh      # starts the server now and on every boo
 ```
 
 Open the panel from any device on the same network:
-`http://<pi-ip>:8080` or `http://<hostname>.local:8080`. The address and a QR code also show on the HDMI screen
-when there are no layers.
+`http://<pi-ip>:8080` or `http://<hostname>.local:8080`. 
+The address and a QR code also show on the output screen when there are no layers.
 
 ## Use
 
