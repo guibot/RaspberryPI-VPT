@@ -1,6 +1,6 @@
 > Versão completa em português. [English summary](../README.md)
 
-# GVPI — media server de vídeo com máscaras para o Raspberry Pi 5
+# GVPT — media server de vídeo com máscaras para o Raspberry Pi 5
 
 Um pequeno media server para um ecrã HDMI. Vários vídeos curtos, em loop e sem áudio, são compostos com
 **máscaras PNG**, posição, escala e **corner pin** (perspetiva). Controlas tudo, em tempo real, por uma
@@ -111,6 +111,32 @@ usa vídeos já no tamanho e fps finais (o ideal é um fps constante, sem áudio
 
 As máscaras podem ser formas de qualquer cor sobre fundo **transparente** (modo *Alpha*, o normal), ou
 imagens planas a preto e branco (modo *Luminância*: branco = visível).
+
+### Desenhar máscaras
+
+Em **Ajustes → Máscara → Desenhar máscara** desenhas a máscara diretamente na pré-visualização, no espaço do ecrã
+de saída. Enquanto desenhas, o ecrã HDMI mostra os contornos e os pontos por cima da imagem, para os acertares na
+superfície real; a máscara em si também se atualiza ao vivo.
+
+- **Polígono:** toca para pôr pontos; toca no primeiro ponto (ou *Fechar forma*, ou Enter) para fechar.
+- **Mão livre:** arrasta para desenhar o contorno; ao largar, a forma fecha-se e é simplificada.
+- **Elipse:** arrasta de um canto ao outro.
+- **Retângulo:** arrasta de um canto ao outro. Fica um polígono de 4 pontos, por isso em *Editar* podes mover
+  cada canto à vontade.
+- **Editar:** arrasta pontos, o centro de uma elipse (ou o interior de qualquer forma, para a mover) e as pegas
+  de raio. Os pontos ocos, a meio de cada lado, inserem um ponto novo.
+- **+ Somar / − Recortar:** uma forma mostra o vídeo ou abre um buraco. As formas aplicam-se pela ordem em que
+  foram feitas. Com uma forma selecionada, muda o tipo dela.
+- **Inverter** troca o que é visível e escondido; **Suavizar** desfoca as bordas.
+- **Desfazer/Refazer** (Ctrl+Z / Ctrl+Shift+Z), **Apagar** (Delete) apaga o ponto ou a forma selecionada.
+
+Ao começar a desenhar, a máscara fica com o tamanho da caixa atual da layer (o vídeo ou, se houver, o PNG), por
+isso a layer não muda de tamanho nem de sítio; o que desenhares fora do vídeo não aparece. Numa layer com PNG, a
+máscara desenhada substitui-o (*Apagar desenho* volta ao PNG). Como os pontos são convertidos
+com a inversa da posição, escala e corner pin da layer, podes desenhar numa layer já deformada.
+
+As formas ficam guardadas na própria layer (em `config.json`), não como ficheiro: duplicar a layer copia o
+desenho. Limites: 32 formas, 256 pontos por forma, 1500 pontos ao todo.
 
 ### PIN
 

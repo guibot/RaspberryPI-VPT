@@ -42,6 +42,8 @@ The address and a QR code also show on the output screen when there are no layer
 - **Media**: upload videos and PNGs (phone gallery or drag and drop). Videos are converted automatically
   (H.264, max 640×480 or 800×600, constant fps, no audio, HDR to SDR). PNGs become masks.
 - **Settings**: output resolution (1920×1080 or 1280×720), conversion size and fps, an option to skip conversion (keep videos as uploaded, e.g. already compressed with HandBrake), optional PIN.
+- **Mask drawing**: draw masks (polygon, freehand, ellipse; add/subtract, invert, feather) directly on the preview,
+  with the outlines shown live on the HDMI output. Shapes are stored in the layer, no file needed.
 - **Debug**: live FPS, dropped frames, CPU, GPU and temperature.
 
 There is **no PIN by default**: anyone on your network can control the screen. Set one in Settings.
@@ -77,7 +79,7 @@ The config file is written atomically and the previous version is kept as `confi
 ## Development
 
 ```bash
-cd server && npm install && npm test    # 25 tests
+cd server && npm install && npm test    # 30 tests
 ```
 
 Layout: `server/` (Node server), `public/player/`, `public/panel/`, `public/shared/geometry.js` (used by both),

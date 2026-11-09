@@ -34,6 +34,7 @@ e `server/lib/config.js` (gravação em disco). O player desenha em `public/play
 | `mask` | `null` | nome de ficheiro | PNG em `data/media/`. |
 | `maskScale` | 1 | 0,01 a 20 | Escala da máscara dentro da caixa (1 = tamanho exato do PNG). |
 | `maskMode` | `alpha` | `alpha`\|`luminance` | `alpha`: opaco = visível. `luminance`: branco = visível. |
+| `vmask` | `null` | ver abaixo | Máscara desenhada (vetorial). Se existir, **substitui o PNG** e define a caixa. |
 | `videoScale` | 1 | 0,01 a 20 | Escala extra do vídeo, por cima do *cover* (1 = encher a caixa). |
 | `videoOffsetX/Y` | 0 | ±5000 | Deslocamento do vídeo dentro da caixa (px da caixa). |
 | `x`, `y` | centro do ecrã | ±10000 | Posição do **centro** da layer, em píxeis de saída. |
@@ -42,6 +43,25 @@ e `server/lib/config.js` (gravação em disco). O player desenha em `public/play
 
 Valores fora dos limites são cortados; valores inválidos voltam ao padrão. Nomes de ficheiro com `/`, `\` ou
 a começar por `.` são rejeitados (sem `../`).
+
+## Máscara desenhada (`vmask`)
+
+```json
+{ "width": 1920, "height": 1080, "feather": 0, "invert": false,
+  "shapes": [ { "type": "poly", "op": "add", "points": [[100, 100], [600, 80], [700, 600]] },
+              { "type": "ellipse", "op": "sub", "cx": 400, "cy": 360, "rx": 100, "ry": 100 } ] }
+```
+
+| Campo | Limites | Significado |
+|---|---|---|
+| `width`, `height` | 16 a 4096 | Tamanho da máscara: faz o papel do tamanho do PNG (define a caixa da layer). |
+| `feather` | 0 a 200 | Desfoque das bordas, em píxeis da máscara. |
+| `invert` | | Troca o que é visível e escondido. |
+| `shapes` | até 32 | Formas, aplicadas por ordem. `op`: `add` mostra, `sub` recorta. |
+| `points` | até 256 por polígono, 1500 ao todo | Coordenadas em píxeis da máscara (±20000, 1 casa decimal). |
+
+O player e o painel convertem as formas num SVG (`public/shared/vmask.js`) usado como `mask-image`, por isso o
+resto da cadeia (passos abaixo) é igual ao de um PNG. As formas só existem na configuração: não há ficheiro.
 
 ## Ordem de aplicação das transformações
 
@@ -95,4 +115,4 @@ Operações inválidas lançam `OpError` e não alteram nada.
 
 ## Testes
 
-`cd server && npm test` (25 testes: normalização, limites, operações, PIN, falhas de escrita, recuperação).
+`cd server && npm test` (30 testes: normalização, limites, operações, máscara desenhada, geometria, PIN, falhas de escrita, recuperação).

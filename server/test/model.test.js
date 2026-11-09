@@ -63,7 +63,7 @@ test('duplicar: cópia logo acima do original, id novo, deslocada', () => {
   let c = applyOp(base(), { op: 'addLayer', layer: { name: 'A', video: 'v.mp4' } });
   c = applyOp(c, { op: 'addLayer', layer: { name: 'B' } });
   c = applyOp(c, { op: 'duplicateLayer', id: c.layers[0].id });
-  assert.deepEqual(c.layers.map(l => l.name), ['A', 'A (cópia)', 'B']);
+  assert.deepEqual(c.layers.map(l => l.name), ['A', 'A (copy)', 'B']);
   assert.notEqual(c.layers[0].id, c.layers[1].id);
   assert.equal(c.layers[1].video, 'v.mp4');
   assert.equal(c.layers[1].x, c.layers[0].x + 40);
@@ -129,4 +129,39 @@ test('conversão de vídeos: ligada por defeito e pode ser desligada', () => {
   assert.equal(normalize(c).convert.process, false);
   c = applyOp(c, { op: 'setConvert', width: 640, height: 480, fps: 30 });
   assert.equal(c.convert.process, true);
+});
+
+test('máscara desenhada: normalização, limites e lixo', () => {
+  let c = applyOp(base(), { op: 'addLayer' });
+  assert.equal(c.layers[0].vmask, null);
+  const id = c.layers[0].id;
+  c = applyOp(c, { op: 'updateLayer', id, patch: { vmask: { width: 1920, height: 1080, feather: 999, invert: 1, shapes: [
+    { type: 'poly', op: 'sub', points: [[1.234, 2], [3, 'x'], 'lixo', [1e9, -1e9]] },
+    { type: 'ellipse', cx: 10, cy: 20, rx: -30, ry: 40 },
+    { type: 'estrela' }, null,
+  ] } } });
+  const v = c.layers[0].vmask;
+  assert.equal(v.feather, 200); assert.equal(v.invert, false);
+  assert.equal(v.shapes.length, 2);
+  assert.deepEqual(v.shapes[0], { type: 'poly', op: 'sub', points: [[1.2, 2], [3, 0], [20000, -20000]] });
+  assert.deepEqual(v.shapes[1], { type: 'ellipse', op: 'add', cx: 10, cy: 20, rx: 30, ry: 40 });
+  c = applyOp(c, { op: 'updateLayer', id, patch: { vmask: null } });
+  assert.equal(c.layers[0].vmask, null);
+});
+
+test('máscara desenhada: no máximo VMASK_MAX_POINTS por forma e VMASK_MAX_TOTAL ao todo', () => {
+  const { VMASK_MAX_POINTS, VMASK_MAX_TOTAL, VMASK_MAX_SHAPES } = require('../lib/model');
+  const pts = n => Array.from({ length: n }, (_, i) => [i, i]);
+  const shapes = Array.from({ length: 40 }, () => ({ type: 'poly', points: pts(300) }));
+  const c = normalize({ layers: [{ id: 'a', vmask: { width: 100, height: 100, shapes } }] });
+  const v = c.layers[0].vmask;
+  assert.ok(v.shapes.length <= VMASK_MAX_SHAPES);
+  assert.ok(v.shapes.every(s => s.points.length <= VMASK_MAX_POINTS));
+  assert.equal(v.shapes.reduce((n, s) => n + s.points.length, 0), VMASK_MAX_TOTAL);
+});
+
+test('máscara desenhada: duplicar copia o desenho', () => {
+  let c = normalize({ layers: [{ id: 'a', vmask: { width: 100, height: 100, shapes: [{ type: 'ellipse', cx: 50, cy: 50, rx: 10, ry: 10 }] } }] });
+  c = applyOp(c, { op: 'duplicateLayer', id: 'a' });
+  assert.deepEqual(c.layers[1].vmask, c.layers[0].vmask);
 });

@@ -53,12 +53,14 @@ function isAuthorized(req) {
 const requireAuth = (req, res, next) => (isAuthorized(req) ? next() : res.status(401).json({ error: 'auth' }));
 
 // ---------- rotas abertas ----------
+const VERSION = require('./package.json').version;       // fonte única da versão da app
+
 app.get('/api/info', async (_req, res) => {
   const ips = lanAddresses();
   const urls = ips.map(ip => `http://${ip}:${PORT}`);
   const mdns = `http://${os.hostname()}.local:${PORT}`;
   const qr = urls[0] ? await QRCode.toString(urls[0], { type: 'svg', margin: 1 }) : null;
-  res.set('Cache-Control', 'no-store').json({ port: PORT, ips, urls, mdns, qr });
+  res.set('Cache-Control', 'no-store').json({ version: VERSION, port: PORT, ips, urls, mdns, qr });
 });
 
 app.get('/api/session', (req, res) =>
@@ -100,7 +102,7 @@ app.post('/api/pin', requireAuth, express.json({ limit: '1kb' }), (req, res) => 
   try {
     store.apply({ op: 'setPin', pin: req.body && req.body.pin });
   } catch (e) {
-    return res.status(400).json({ error: e instanceof OpError ? e.message : 'erro' });
+    return res.status(400).json({ error: e instanceof OpError ? e.message : 'error' });
   }
   auth.rotate();
   for (const c of wss.clients) if (!c.loopback) c.close(4401, 'pin alterado');
@@ -120,23 +122,23 @@ app.put('/api/upload', requireAuth, async (req, res) => {
   let orig;
   try { orig = Media.sanitize(decodeURIComponent(req.headers['x-filename'] || '')); } catch { orig = ''; }
   const size = Number(req.headers['content-length']);
-  if (!orig) return fail(400, 'nome de ficheiro em falta');
-  if (!size) return fail(411, 'tamanho em falta');
-  if (size > MAX_UPLOAD) return fail(413, 'ficheiro demasiado grande (máx. 4 GB)');
-  try { const f = fs.statfsSync(DATA_DIR); if (f.bavail * f.bsize < size * 2 + 512 * 1024 ** 2) return fail(507, 'sem espaço livre suficiente'); } catch {}
+  if (!orig) return fail(400, 'missing file name');
+  if (!size) return fail(411, 'missing size');
+  if (size > MAX_UPLOAD) return fail(413, 'file too large (max 4 GB)');
+  try { const f = fs.statfsSync(DATA_DIR); if (f.bavail * f.bsize < size * 2 + 512 * 1024 ** 2) return fail(507, 'not enough free space'); } catch {}
   const ext = path.extname(orig).toLowerCase();
   const isPng = ext === '.png';
   const id = crypto.randomBytes(4).toString('hex');
   const part = path.join(converter.uploadDir, `${id}__${orig}.part`);
   let received = 0;
-  const limit = new Transform({ transform(chunk, _e, cb) { received += chunk.length; cb(received > size ? new Error('excedeu o tamanho') : null, chunk); } });
+  const limit = new Transform({ transform(chunk, _e, cb) { received += chunk.length; cb(received > size ? new Error('exceeded the declared size') : null, chunk); } });
   try {
     await pipeline(req, limit, fs.createWriteStream(part));
-  } catch { try { fs.unlinkSync(part); } catch {} return fail(400, 'envio interrompido'); }
-  if (received !== size) { try { fs.unlinkSync(part); } catch {} return fail(400, 'envio incompleto'); }
+  } catch { try { fs.unlinkSync(part); } catch {} return fail(400, 'upload interrupted'); }
+  if (received !== size) { try { fs.unlinkSync(part); } catch {} return fail(400, 'upload incomplete'); }
   if (isPng) {                                          // máscara: valida e guarda diretamente
     const head = Buffer.alloc(8); const fd = fs.openSync(part, 'r'); fs.readSync(fd, head, 0, 8, 0); fs.closeSync(fd);
-    if (!head.equals(PNG_MAGIC)) { fs.unlinkSync(part); return fail(415, 'não é um PNG válido'); }
+    if (!head.equals(PNG_MAGIC)) { fs.unlinkSync(part); return fail(415, 'not a valid PNG'); }
     const name = media.uniqueName(path.basename(orig, ext), '.png');
     fs.renameSync(part, path.join(media.dir, name));
     broadcast({ type: 'media' });
@@ -150,8 +152,8 @@ app.put('/api/upload', requireAuth, async (req, res) => {
 
 app.delete('/api/media/:name', requireAuth, (req, res) => {
   const name = req.params.name, users = usageOf(name);
-  if (users.length && req.query.force !== '1') return res.status(409).json({ error: 'em uso', layers: users.map(l => l.name) });
-  if (!media.remove(name)) return res.status(404).json({ error: 'inexistente' });
+  if (users.length && req.query.force !== '1') return res.status(409).json({ error: 'in use', layers: users.map(l => l.name) });
+  if (!media.remove(name)) return res.status(404).json({ error: 'not found' });
   for (const l of users) {                              // as layers deixam de apontar para um ficheiro que já não existe
     store.apply({ op: 'updateLayer', id: l.id, patch: { [l.video === name ? 'video' : 'mask']: null } });
   }
@@ -162,11 +164,11 @@ app.delete('/api/media/:name', requireAuth, (req, res) => {
 app.post('/api/media/:name/rename', requireAuth, express.json({ limit: '1kb' }), (req, res) => {
   const from = req.params.name, ext = path.extname(from);
   const base = Media.sanitize(String((req.body && req.body.name) || '')).replace(new RegExp(ext.replace('.', '\\.') + '$', 'i'), '');
-  if (!base) return res.status(400).json({ error: 'nome inválido' });
+  if (!base) return res.status(400).json({ error: 'invalid name' });
   const to = base + ext;
   const r = to === from ? 'ok' : media.rename(from, to);
-  if (r === 'inexistente') return res.status(404).json({ error: 'inexistente' });
-  if (r === 'existe') return res.status(409).json({ error: 'já existe um ficheiro com esse nome' });
+  if (r === 'inexistente') return res.status(404).json({ error: 'not found' });
+  if (r === 'existe') return res.status(409).json({ error: 'a file with that name already exists' });
   for (const l of usageOf(from)) {                      // as layers continuam a apontar para o ficheiro renomeado
     const patch = {}; if (l.video === from) patch.video = to; if (l.mask === from) patch.mask = to;
     store.apply({ op: 'updateLayer', id: l.id, patch });
@@ -217,10 +219,19 @@ function updateStatsTimer() {
   for (const p of players) send(p, { type: 'debug', on: subs > 0 });     // o player só mede quando alguém vê
 }
 
+// Identifica este arranque: se mudar, o player e o painel recarregam-se (apanham o código novo).
+const BOOT_ID = Date.now().toString(36);
+
+// Estado efémero (não vai para a configuração): só interessa ao player local.
+function relayMaskEdit(id, shape) {
+  for (const c of wss.clients) if (c.loopback) send(c, { type: 'maskEdit', id, shape });
+}
+
 wss.on('connection', ws => {
   ws.isAlive = true;
   ws.statsSub = false;
-  ws.on('close', updateStatsTimer);
+  ws.on('close', () => { updateStatsTimer(); if (ws.maskEdit) relayMaskEdit(null, -1);
+    if (ws.maskCursor) for (const c of wss.clients) if (c.loopback) send(c, { type: 'maskCursor', x: null, y: null }); });
   ws.on('pong', () => { ws.isAlive = true; });
   ws.on('error', () => {});
   ws.on('message', data => {
@@ -231,12 +242,25 @@ wss.on('connection', ws => {
       if (ws.loopback) lastPlayer = { t: Date.now(), s: { fps: num(msg.fps), dropped: num(msg.dropped), recent: num(msg.recent), total: num(msg.total), layers: num(msg.layers) } };
       return;
     }
+    if (msg && msg.type === 'maskEdit') {                        // o painel está a desenhar uma máscara: o player mostra os contornos
+      ws.maskEdit = typeof msg.id === 'string' && msg.id.length <= 40 ? msg.id : null;
+      relayMaskEdit(ws.maskEdit, Number.isInteger(msg.shape) ? msg.shape : -1);
+      return;
+    }
+    if (msg && msg.type === 'maskCursor') {                      // posição do rato no painel (mira no ecrã de saída)
+      const ok = v => typeof v === 'number' && Number.isFinite(v) && Math.abs(v) < 1e5;
+      const pos = ok(msg.x) && ok(msg.y) ? { x: msg.x, y: msg.y } : null;
+      ws.maskCursor = !!pos;
+      for (const c of wss.clients) if (c.loopback) send(c, { type: 'maskCursor', ...(pos || { x: null, y: null }) });
+      return;
+    }
     if (!msg || msg.type !== 'op') return;
     // O PIN só se altera por /api/pin (precisa de renovar a sessão); a última alteração prevalece.
     if (msg.op && msg.op.op === 'setPin') return send(ws, { type: 'error', message: 'use /api/pin' });
     try { store.apply(msg.op); }
-    catch (e) { send(ws, { type: 'error', message: e instanceof OpError ? e.message : 'operação inválida' }); }
+    catch (e) { send(ws, { type: 'error', message: e instanceof OpError ? e.message : 'invalid operation' }); }
   });
+  send(ws, { type: 'hello', boot: BOOT_ID });
   send(ws, { type: 'config', config: publicConfig(store.get()) });
   send(ws, { type: 'jobs', jobs: converter.list() });
   if (ws.loopback && statsTimer) send(ws, { type: 'debug', on: true });

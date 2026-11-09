@@ -53,3 +53,16 @@ test('posição, escala e corner pin aplicam-se à caixa da máscara', () => {
   assert.deepEqual(g.pinned[0], [400 - 800 + 5, 300 - 600 + 7]);
   assert.deepEqual(g.base[2], [400 + 800, 300 + 600]);
 });
+
+test('toMask é a inversa de toScreen, também com corner pin e maskScale', () => {
+  const c = layer({ x: 700, y: 400, scale: 1.7, maskScale: 0.8, pins: [{ x: 30, y: -20 }, { x: -50, y: 10 }, { x: 80, y: 60 }, { x: -10, y: -40 }] });
+  const g = raw.compute(c, MASK, [640, 480]);
+  for (const p of [[0, 0], [800, 600], [123.4, 456.7], [-50, 900]]) {
+    const back = raw.toMask(g, c, raw.toScreen(g, c, p));
+    assert.ok(Math.abs(back[0] - p[0]) < 1e-6 && Math.abs(back[1] - p[1]) < 1e-6, `${p} -> ${back}`);
+  }
+  // sem transformações: espaço da máscara = caixa centrada em (x, y)
+  const g0 = raw.compute(layer(), MASK, [640, 480]);
+  const s = raw.toScreen(g0, layer(), [0, 0]);
+  assert.ok(Math.abs(s[0] - 560) < 1e-9 && Math.abs(s[1] - 240) < 1e-9);
+});

@@ -9,6 +9,7 @@ html, body { margin: 0; width: 100%; height: 100%; background: #000; overflow: h
   -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
   -webkit-mask-position: center; mask-position: center;
 }
+#edit-overlay { position: absolute; left: 0; top: 0; z-index: 10000; overflow: visible; pointer-events: none; }
 .layer video { position: absolute; display: block; max-width: none; }
 
 #splash {

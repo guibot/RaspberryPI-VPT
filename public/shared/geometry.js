@@ -30,6 +30,20 @@ const Geometry = (() => {
     return [s[0], s[1], s[2], s[3], s[4], s[5], s[6], s[7]];
   }
 
+  // Aplica a homografia m (8 coeficientes) a um ponto.
+  function mapPoint(m, x, y) {
+    const d = m[6] * x + m[7] * y + 1;
+    return [(m[0] * x + m[1] * y + m[2]) / d, (m[3] * x + m[4] * y + m[5]) / d];
+  }
+  // Inversa de uma homografia (matriz 3x3 com o último elemento a 1), normalizada da mesma forma.
+  function invert(m) {
+    const [a, b, c, d, e, f, g, h] = m, i = 1;
+    const A = e * i - f * h, B = c * h - b * i, C = b * f - c * e;
+    const D = f * g - d * i, E = a * i - c * g, F = c * d - a * f;
+    const G = d * h - e * g, H = b * g - a * h, I = a * e - b * d;
+    return [A / I, B / I, C / I, D / I, E / I, F / I, G / I, H / I];
+  }
+
   // c = layer da configuração; box = [largura, altura] da caixa (máscara ou, sem máscara, vídeo);
   // vid = [largura, altura] nativas do vídeo.
   function compute(c, box, vid) {
@@ -45,8 +59,20 @@ const Geometry = (() => {
       video: { width: vidW, height: vidH, left: (vw - vidW) / 2 + c.videoOffsetX, top: (vh - vidH) / 2 + c.videoOffsetY },
       maskSize: c.maskScale * 100 + '%',
       transform: `matrix3d(${m[0]},${m[3]},0,${m[6]},${m[1]},${m[4]},0,${m[7]},0,0,1,0,${m[2]},${m[5]},0,1)`,
-      base, pinned,
+      base, pinned, m,
     };
+  }
+
+  // Espaço da máscara (píxeis do PNG ou da máscara desenhada) <-> espaço do ecrã de saída.
+  // A máscara está centrada na caixa e escalada por maskScale; depois aplica-se a homografia da layer.
+  function toScreen(g, c, [x, y]) {
+    const W = g.box.width, H = g.box.height, k = c.maskScale;
+    return mapPoint(g.m, W / 2 + (x - W / 2) * k, H / 2 + (y - H / 2) * k);
+  }
+  function toMask(g, c, [x, y]) {
+    const W = g.box.width, H = g.box.height, k = c.maskScale;
+    const [bx, by] = mapPoint(g.inv || (g.inv = invert(g.m)), x, y);
+    return [W / 2 + (bx - W / 2) / k, H / 2 + (by - H / 2) / k];
   }
 
   // Aplica a geometria a um elemento-caixa (.layer) e aos elementos de média (vídeos ou miniaturas) lá dentro.
@@ -65,5 +91,5 @@ const Geometry = (() => {
     return g;
   }
 
-  return { homography, compute, apply };
+  return { homography, mapPoint, invert, compute, apply, toScreen, toMask };
 })();

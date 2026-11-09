@@ -92,7 +92,7 @@ class Converter extends EventEmitter {
     try {
       const info = await probe(job.src);
       const st = info.streams && info.streams[0];
-      if (!st) throw new Error('o ficheiro não tem vídeo');
+      if (!st) throw new Error('the file has no video');
       const duration = Number(info.format && info.format.duration) || 0;
       const settings = this.getSettings();
       const ext = path.extname(job.name).toLowerCase();
@@ -122,7 +122,7 @@ class Converter extends EventEmitter {
         });
         child.stderr.on('data', d => { err = (err + d).slice(-2000); });
         child.on('error', reject);
-        child.on('close', code => (code === 0 ? resolve() : reject(new Error(job.cancelled ? 'cancelado' : (err.trim().split('\n').pop() || `ffmpeg terminou com o código ${code}`)))));
+        child.on('close', code => (code === 0 ? resolve() : reject(new Error(job.cancelled ? 'cancelled' : (err.trim().split('\n').pop() || `ffmpeg exited with code ${code}`)))));
       });
       const base = path.basename(job.name, path.extname(job.name)).replace(/^\.+/, '') || 'video';
       const final = this.uniqueName(base);

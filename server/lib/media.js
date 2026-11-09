@@ -84,7 +84,7 @@ class Media {
   // Devolve o caminho da miniatura (frame do vídeo), gerando-a se faltar ou estiver desatualizada.
   thumb(name) {
     const src = this.file(name);
-    if (!src) return Promise.reject(new Error('nome inválido'));
+    if (!src) return Promise.reject(new Error('invalid name'));
     const dst = path.join(this.thumbDir, name + '.jpg');
     if (this.pending.has(dst)) return this.pending.get(dst);
     const job = this.queue.then(async () => {
@@ -96,7 +96,7 @@ class Media {
           if (fs.existsSync(dst)) return dst;
         } catch {}
       }
-      throw new Error('não foi possível gerar a miniatura');
+      throw new Error('could not generate the thumbnail');
     }).finally(() => this.pending.delete(dst));
     this.pending.set(dst, job);
     this.queue = job.catch(() => {});

@@ -23,6 +23,7 @@
   let media = [];                 // biblioteca: [{name, kind, width, height, mtime}]
   let sel = null;                 // id da layer selecionada
   let ws = null, retry = 500;
+  let boot = null;                // arranque do servidor; se mudar, recarrega (código novo)
   let awaitNew = false;           // depois de adicionar/duplicar, seleciona a layer nova
   const lastEdit = new Map();     // id -> hora da última edição local (evita "saltos" com ecos do servidor)
   const pending = new Map();      // id -> alterações ainda por enviar
@@ -35,10 +36,15 @@
   const thumbUrl = m => `/api/thumb/${encodeURIComponent(m.name)}?v=${m.mtime}`;
   const maskUrl = n => `/media/${encodeURIComponent(n)}`;
   // Miniatura de máscara a preto e branco: a zona opaca (visível) a branco sobre preto, seja qual for a cor do PNG.
-  const maskPreview = n => h('i', { style: `-webkit-mask-image:url("${maskUrl(n)}");mask-image:url("${maskUrl(n)}")` });
+  const maskPreview = n => maskPreviewCss(`url("${maskUrl(n)}")`);
+  const maskPreviewCss = u => h('i', { style: `-webkit-mask-image:${u};mask-image:${u}` });
+  const layerMaskCss = l => l.vmask ? VMask.cssUrl(l.vmask) : l.mask ? `url("${maskUrl(l.mask)}")` : 'none';   // a desenhada substitui o PNG
   // vidDims: tamanho do vídeo; boxDims: tamanho da caixa (a máscara manda; sem máscara, o vídeo).
   const vidDims = l => { const m = mediaByName(l.video); return m && m.width ? [m.width, m.height] : [640, 480]; };
-  const boxDims = l => { const m = l.mask && mediaByName(l.mask); return m && m.width ? [m.width, m.height] : vidDims(l); };
+  const boxDims = l => {
+    if (l.vmask) return [l.vmask.width, l.vmask.height];
+    const m = l.mask && mediaByName(l.mask); return m && m.width ? [m.width, m.height] : vidDims(l);
+  };
   const mediaSig = () => media.map(m => `${m.name}:${m.mtime}`).join('|');
 
   // ---------- rede ----------
@@ -54,19 +60,20 @@
   }
 
   function connect() {
-    setStatus('', 'a ligar');
+    setStatus('', 'connecting');
     ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`);
-    ws.onopen = () => { retry = 500; setStatus('on', 'ligado'); if (debugOn) ws.send(JSON.stringify({ type: 'subscribe', stats: true })); };
+    ws.onopen = () => { retry = 500; setStatus('on', 'connected'); if (debugOn) ws.send(JSON.stringify({ type: 'subscribe', stats: true })); if (editor.active) editor.announce(); };
     ws.onmessage = ev => {
       let m; try { m = JSON.parse(ev.data); } catch { return; }
-      if (m.type === 'config') onConfig(m.config);
+      if (m.type === 'hello') { if (boot && m.boot !== boot) { flush(); location.reload(); return; } boot = m.boot; }
+      else if (m.type === 'config') onConfig(m.config);
       else if (m.type === 'jobs') { jobs = m.jobs; renderQueue(); }
       else if (m.type === 'media') refreshMedia();
       else if (m.type === 'stats') renderDebug(m);
       else if (m.type === 'error') toast(m.message);
     };
     ws.onclose = async () => {
-      setStatus('off', 'sem ligação');
+      setStatus('off', 'disconnected');
       const s = await api('/api/session').catch(() => null);
       if (s && s.ok && s.json.hasPin && !s.json.authed) return showLogin();      // sessão terminada ou PIN alterado
       setTimeout(connect, retry); retry = Math.min(retry * 2, 5000);
@@ -76,7 +83,7 @@
 
   function sendOp(op) {
     if (ws && ws.readyState === 1) ws.send(JSON.stringify({ type: 'op', op }));
-    else toast('Sem ligação ao servidor');
+    else toast('No connection to the server');
   }
 
   // Alteração a uma layer: aplica-se já localmente e envia-se no máximo a cada 40 ms (o último valor vence).
@@ -109,6 +116,7 @@
     if (!sel || !layerById(sel)) sel = cfg.layers.length ? cfg.layers[cfg.layers.length - 1].id : null;
     renderAll();
     syncSettings();
+    editor.sync();
   }
 
   async function refreshMedia() {
@@ -124,31 +132,31 @@
   let listSig = '';
   function renderList() {
     const ul = $('#layer-list');
-    const sig = JSON.stringify([cfg.layers.map(l => [l.id, l.name, l.visible, l.video, l.mask]), sel, mediaSig()]);
+    const sig = JSON.stringify([cfg.layers.map(l => [l.id, l.name, l.visible, l.video, l.mask, l.vmask]), sel, mediaSig()]);
     if (sig === listSig) return;
     listSig = sig;
     ul.textContent = '';
-    if (!cfg.layers.length) ul.append(h('li', { class: 'empty', text: 'Ainda não há layers.' }));
+    if (!cfg.layers.length) ul.append(h('li', { class: 'empty', text: 'No layers yet.' }));
     // O topo da lista é a layer de cima (último do array).
     [...cfg.layers].map((l, i) => [l, i]).reverse().forEach(([l, i]) => {
       const m = mediaByName(l.video);
       const li = h('li', { class: 'li' + (l.id === sel ? ' sel' : '') + (l.visible ? '' : ' hidden-layer') },
         h('div', { class: 'li-main', onclick: () => select(l.id) },
           h('div', { class: 'li-thumb', style: m ? `background-image:url("${thumbUrl(m)}")` : '' }),
-          l.mask ? h('div', { class: 'li-mask', title: l.mask }, maskPreview(l.mask)) : null,   // PNG da máscara
+          l.vmask || l.mask ? h('div', { class: 'li-mask', title: l.vmask ? 'drawn mask' : l.mask }, maskPreviewCss(layerMaskCss(l))) : null,
           h('div', { class: 'li-name', text: l.name }),
-          h('button', { class: 'li-eye', title: l.visible ? 'Esconder' : 'Mostrar', 'aria-label': l.visible ? 'Esconder' : 'Mostrar',
+          h('button', { class: 'li-eye', title: l.visible ? 'Hide' : 'Show', 'aria-label': l.visible ? 'Hide' : 'Show',
             text: l.visible ? '●' : '○', onclick: e => { e.stopPropagation(); patchLayer(l.id, { visible: !l.visible }); } })));
       if (l.id === sel) li.append(h('div', { class: 'li-actions' },
-        h('button', { text: '▲', title: 'Subir', 'aria-label': 'Subir', disabled: i === cfg.layers.length - 1, onclick: () => sendOp({ op: 'moveLayer', id: l.id, index: i + 1 }) }),
-        h('button', { text: '▼', title: 'Descer', 'aria-label': 'Descer', disabled: i === 0, onclick: () => sendOp({ op: 'moveLayer', id: l.id, index: i - 1 }) }),
-        h('button', { text: '⧉', title: 'Duplicar', 'aria-label': 'Duplicar', onclick: () => { awaitNew = true; sendOp({ op: 'duplicateLayer', id: l.id }); } }),
-        h('button', { class: 'danger', text: '✕', title: 'Apagar', 'aria-label': 'Apagar', onclick: () => { if (confirm(`Apagar a layer “${l.name}”?`)) sendOp({ op: 'removeLayer', id: l.id }); } })));
+        h('button', { text: '▲', title: 'Move up', 'aria-label': 'Move up', disabled: i === cfg.layers.length - 1, onclick: () => sendOp({ op: 'moveLayer', id: l.id, index: i + 1 }) }),
+        h('button', { text: '▼', title: 'Move down', 'aria-label': 'Move down', disabled: i === 0, onclick: () => sendOp({ op: 'moveLayer', id: l.id, index: i - 1 }) }),
+        h('button', { text: '⧉', title: 'Duplicate', 'aria-label': 'Duplicate', onclick: () => { awaitNew = true; sendOp({ op: 'duplicateLayer', id: l.id }); } }),
+        h('button', { class: 'danger', text: '✕', title: 'Delete', 'aria-label': 'Delete', onclick: () => { if (confirm(`Delete layer “${l.name}”?`)) sendOp({ op: 'removeLayer', id: l.id }); } })));
       ul.append(li);
     });
   }
 
-  function select(id) { sel = id; renderAll(); }
+  function select(id) { if (id !== sel) editor.stop(); sel = id; renderAll(); }
 
   // ---------- propriedades ----------
   const LIM = { scale: [0.01, 20], maskScale: [0.01, 20], videoScale: [0.01, 20], videoOffset: [-5000, 5000], xy: [-10000, 10000], pin: [-3000, 3000] };
@@ -217,9 +225,9 @@
     const fill = () => {
       const l = layerById(sel); const cur = l ? l[key] : null;
       sl.textContent = '';
-      sl.append(h('option', { value: '', text: '— nenhum —' }));
+      sl.append(h('option', { value: '', text: '— none —' }));
       const items = media.filter(m => m.kind === kind);
-      if (cur && !items.some(m => m.name === cur)) sl.append(h('option', { value: cur, text: `(em falta) ${cur}` }));
+      if (cur && !items.some(m => m.name === cur)) sl.append(h('option', { value: cur, text: `(missing) ${cur}` }));
       for (const m of items) sl.append(h('option', { value: m.name, text: m.width ? `${m.name}  (${m.width}×${m.height})` : m.name }));
       sl.value = cur || '';
     };
@@ -233,49 +241,57 @@
   function buildProps() {
     const box = $('#props'); box.textContent = ''; rows = []; selects.length = 0;
     const l = layerById(sel);
-    if (!l) { box.append(h('p', { class: 'empty', text: 'Seleciona ou adiciona uma layer.' })); return; }
+    if (!l) { box.append(h('p', { class: 'empty', text: 'Select or add a layer.' })); return; }
     const L = () => layerById(sel);
     const patch = p => patchLayer(sel, p);
     const W = cfg.output.width, H = cfg.output.height;
     const group = (title, ...kids) => h('div', { class: 'group' }, h('div', { class: 'gt', text: title }), ...kids);
     const g2 = (...kids) => h('div', { class: 'g2' }, ...kids);
 
-    const name = h('input', { type: 'text', maxlength: 80, 'aria-label': 'Nome' });
+    const name = h('input', { type: 'text', maxlength: 80, 'aria-label': 'Name' });
     name.addEventListener('input', () => patch({ name: name.value || 'Layer' }));
     selects.push(() => { if (document.activeElement !== name) name.value = L().name; });
 
-    const modeSeg = seg([['alpha', 'ALPHA'], ['luminance', 'LUMINÂNCIA']], () => L().maskMode, v => patch({ maskMode: v }));
-    const PIN_NAMES = ['SUP. ESQ.', 'SUP. DIR.', 'INF. DIR.', 'INF. ESQ.'];
+    const modeSeg = seg([['alpha', 'ALPHA'], ['luminance', 'LUMINANCE']], () => L().maskMode, v => patch({ maskMode: v }));
+    const PIN_NAMES = ['TOP LEFT', 'TOP RIGHT', 'BOTTOM RIGHT', 'BOTTOM LEFT'];
 
     box.append(
       group('Layer',
-        h('label', { class: 'field' }, 'NOME', name),
-        mediaSelect('VÍDEO', 'video', 'video'),
-        mediaSelect('MÁSCARA', 'mask', 'mask')),
-      group('Máscara',
-        modeSeg,
-        numRow('Escala', [0.1, 5], LIM.maskScale, 0.01, () => L().maskScale, v => patch({ maskScale: v }))),
-      group('Posição (centro)',
+        h('label', { class: 'field' }, 'NAME', name),
+        mediaSelect('VIDEO', 'video', 'video'),
+        mediaSelect('MASK', 'mask', 'mask')),
+      group('Position',
         g2(numRow('X', [0, W], LIM.xy, 1, () => L().x, v => patch({ x: v })),
            numRow('Y', [0, H], LIM.xy, 1, () => L().y, v => patch({ y: v }))),
-        numRow('Escala', [0.1, 5], LIM.scale, 0.01, () => L().scale, v => patch({ scale: v }))),
-      group('Vídeo na layer',
-        numRow('Escala', [0.1, 5], LIM.videoScale, 0.01, () => L().videoScale, v => patch({ videoScale: v })),
-        g2(numRow('Desloc. X', [-500, 500], LIM.videoOffset, 1, () => L().videoOffsetX, v => patch({ videoOffsetX: v })),
-           numRow('Desloc. Y', [-500, 500], LIM.videoOffset, 1, () => L().videoOffsetY, v => patch({ videoOffsetY: v })))),
+        numRow('Scale', [0.1, 5], LIM.scale, 0.01, () => L().scale, v => patch({ scale: v }))),
+      group('Mask',
+        modeSeg,
+        h('div', { class: 'row-btns tight' },
+          h('button', { type: 'button', class: 'primary', text: l.vmask ? 'Edit drawing' : 'Draw mask', onclick: () => editor.start() }),
+          l.vmask ? h('button', { type: 'button', class: 'danger', text: 'Delete drawing', onclick: () => {
+            if (confirm('Delete the drawn mask of this layer?' + (l.mask ? ' It goes back to using the PNG.' : ''))) { editor.stop(); patch({ vmask: null }); scheduleProps(); }
+          } }) : null),
+        l.vmask && l.mask ? h('p', { class: 'hint', text: 'The drawn mask replaces the PNG chosen above.' }) : null,
+        numRow('Scale', [0.1, 5], LIM.maskScale, 0.01, () => L().maskScale, v => patch({ maskScale: v }))),
+      group('Video',
+        numRow('Scale', [0.1, 5], LIM.videoScale, 0.01, () => L().videoScale, v => patch({ videoScale: v })),
+        g2(numRow('Offset X', [-500, 500], LIM.videoOffset, 1, () => L().videoOffsetX, v => patch({ videoOffsetX: v })),
+           numRow('Offset Y', [-500, 500], LIM.videoOffset, 1, () => L().videoOffsetY, v => patch({ videoOffsetY: v })))),
       group('Corner pin (px)',
         h('div', { class: 'pins' }, PIN_NAMES.map((t, i) =>
           h('div', { class: 'pin-block' }, h('b', { text: t }),
             ['x', 'y'].map(ax => numRow(ax.toUpperCase(), [-300, 300], LIM.pin, 1, () => L().pins[i][ax], v => {
               const pins = L().pins.map(p => ({ ...p })); pins[i][ax] = v; patch({ pins });
             }))))),
-        h('button', { text: 'Repor cantos', onclick: () => patch({ pins: [0, 1, 2, 3].map(() => ({ x: 0, y: 0 })) }) })));
+        h('button', { text: 'Reset corners', onclick: () => patch({ pins: [0, 1, 2, 3].map(() => ({ x: 0, y: 0 })) }) })));
     syncProps(true);
   }
 
+  const scheduleProps = () => { propsKey = ''; scheduleRender(); };
   function syncProps(force) {
     if (!cfg) return;
-    const key = [sel, cfg.output.width, mediaSig()].join('|');
+    const l = layerById(sel);
+    const key = [sel, cfg.output.width, mediaSig(), !!(l && l.vmask), !!(l && l.mask)].join('|');
     if (key !== propsKey && !force) { propsKey = key; buildProps(); return; }
     propsKey = key;
     if (!layerById(sel)) return;
@@ -290,6 +306,12 @@
   pstage.append(overlay);
   const handles = [0, 1, 2, 3].map(i => { const e = h('div', { class: 'handle', 'data-i': i }); pstage.append(e); return e; });
   const pl = new Map();           // id -> elemento .layer da pré-visualização
+  const editor = MaskEditor({
+    layer: () => layerById(sel), output: () => cfg.output, boxDims, geo: l => geo(l),
+    patch: p => patchLayer(sel, p), scale: () => scale, svg: overlay, toolbar: $('#mask-tools'),
+    send: msg => { if (ws && ws.readyState === 1) ws.send(JSON.stringify(msg)); },
+    render: () => scheduleRender(), toast: t => toast(t),
+  });
   let scale = 1, raf = 0;
 
   function fitPreview() {
@@ -321,15 +343,16 @@
         e.dataset.src = src; e.textContent = '';
         e.append(src ? h('img', { src, draggable: 'false', alt: '' }) : h('div', { class: 'ph' }));
       }
-      const mk = l.mask ? `url("${maskUrl(l.mask)}")` : 'none';
+      const mk = layerMaskCss(l);
       if (e.dataset.mask !== mk) { e.dataset.mask = mk; e.style.webkitMaskImage = e.style.maskImage = mk; }
       Geometry.apply(e, [e.firstChild], l, boxDims(l), vidDims(l));
     });
     // contorno e pegas da layer selecionada
     const l = layerById(sel);
     overlay.style.zIndex = 1000;
-    handles.forEach(e => { e.style.zIndex = 1001; e.style.display = l ? '' : 'none'; });
+    handles.forEach(e => { e.style.zIndex = 1001; e.style.display = l && !editor.active ? '' : 'none'; });   // a desenhar: sem pegas de canto
     poly.style.display = l ? '' : 'none';
+    editor.render();
     if (!l) return;
     const g = geo(l);
     poly.setAttribute('points', g.pinned.map(p => p.join(',')).join(' '));
@@ -360,6 +383,7 @@
   let drag = null;
   preview.addEventListener('pointerdown', e => {
     if (!cfg) return;
+    if (editor.active) { editor.down(point(e)); preview.setPointerCapture(e.pointerId); e.preventDefault(); return; }
     const p = point(e), hEl = e.target.closest && e.target.closest('.handle');
     if (hEl) {                                              // arrastar um canto (corner pin)
       const l = layerById(sel); if (!l) return;
@@ -379,6 +403,7 @@
     e.preventDefault();
   });
   preview.addEventListener('pointermove', e => {
+    if (editor.active) { editor.hover(point(e)); return editor.move(point(e)); }
     if (!drag) return;
     const p = point(e), l = layerById(sel); if (!l) return;
     const clamp = (v, [lo, hi]) => Math.min(hi, Math.max(lo, v));
@@ -391,8 +416,9 @@
       patchLayer(drag.id, { x: Math.round(clamp(drag.x0 + p[0] - drag.start[0], LIM.xy)), y: Math.round(clamp(drag.y0 + p[1] - drag.start[1], LIM.xy)) });
     }
   });
-  const endDrag = () => { if (drag && drag.el) drag.el.classList.remove('drag'); drag = null; };
+  const endDrag = () => { if (editor.active) editor.up(); if (drag && drag.el) drag.el.classList.remove('drag'); drag = null; };
   preview.addEventListener('pointerup', endDrag);
+  preview.addEventListener('pointerleave', () => { if (editor.active && !drag) editor.leave(); });
   preview.addEventListener('pointercancel', endDrag);
   new ResizeObserver(() => { if (cfg) scheduleRender(); }).observe(wrap);
   addEventListener('resize', () => { if (cfg) scheduleRender(); });
@@ -419,7 +445,7 @@
     $('#set-conv-size').value = `${cfg.convert.maxWidth}x${cfg.convert.maxHeight}`; $('#set-conv-fps').value = String(cfg.convert.fps);
     $('#set-conv-on').checked = cfg.convert.process !== false;
     $('#set-conv-size').disabled = $('#set-conv-fps').disabled = cfg.convert.process === false;
-    $('#pin-state').textContent = cfg.hasPin ? 'O painel está protegido por PIN.' : 'Sem PIN: qualquer pessoa na rede local pode controlar o ecrã.';
+    $('#pin-state').textContent = cfg.hasPin ? 'The panel is protected by a PIN.' : 'No PIN: anyone on the local network can control the screen.';
     $('#btn-pin-remove').hidden = !cfg.hasPin; $('#btn-logout').hidden = !cfg.hasPin;
   }
   $('#btn-settings').addEventListener('click', () => { $('#set-msg').textContent = ''; $('#set-pin').value = ''; syncSettings(); dlg.showModal(); });
@@ -432,7 +458,7 @@
     const r = await api('/api/pin', { pin });
     const msg = $('#set-msg');
     msg.style.color = r.ok ? 'var(--ok)' : 'var(--danger)';
-    msg.textContent = r.ok ? (r.json.hasPin ? 'PIN guardado.' : 'PIN removido.') : (r.json && r.json.error) || 'Erro ao guardar o PIN';
+    msg.textContent = r.ok ? (r.json.hasPin ? 'PIN saved.' : 'PIN removed.') : (r.json && r.json.error) || 'Could not save the PIN';
     if (r.ok) $('#set-pin').value = '';
   }
   $('#btn-pin-save').addEventListener('click', () => savePin($('#set-pin').value));
@@ -473,17 +499,17 @@
     const rows = [];
     uploads.forEach((u, i) => { if (!u.done || u.error) rows.push(h('li', { class: 'mrow qrow' },
       h('div', { class: 'info' }, h('div', { class: 'nm', text: u.name }),
-        u.error ? h('div', { class: 'sub err', text: 'Erro: ' + u.error }) : h('div', { class: 'sub', text: `A enviar ${u.pct} %` }),
+        u.error ? h('div', { class: 'sub err', text: 'Error: ' + u.error }) : h('div', { class: 'sub', text: `Uploading ${u.pct} %` }),
         u.error ? null : h('progress', { max: 100, value: u.pct })),
-      u.error ? h('button', { text: '✕', 'aria-label': 'Remover', onclick: () => { uploads.splice(i, 1); renderQueue(); } }) : null)); });
+      u.error ? h('button', { text: '✕', 'aria-label': 'Remove', onclick: () => { uploads.splice(i, 1); renderQueue(); } }) : null)); });
     for (const j of jobs) {
-      const txt = { queued: 'Na fila', converting: `A converter ${j.progress} %`, done: 'Pronto ✓', error: 'Erro: ' + j.error }[j.status];
+      const txt = { queued: 'Queued', converting: `Converting ${j.progress} %`, done: 'Done ✓', error: 'Error: ' + j.error }[j.status];
       rows.push(h('li', { class: 'mrow qrow' },
         h('div', { class: 'info' }, h('div', { class: 'nm', text: j.name }), h('div', { class: 'sub' + (j.status === 'error' ? ' err' : ''), text: txt }),
           j.status === 'converting' ? h('progress', { max: 100, value: j.progress }) : null),
-        j.status === 'done' ? null : h('button', { text: j.status === 'error' ? '✕' : 'Cancelar', 'aria-label': 'Remover', onclick: () => api('/api/jobs/' + j.id, undefined, 'DELETE') })));
+        j.status === 'done' ? null : h('button', { text: j.status === 'error' ? '✕' : 'Cancel', 'aria-label': 'Remove', onclick: () => api('/api/jobs/' + j.id, undefined, 'DELETE') })));
     }
-    if (!rows.length) rows.push(h('li', { class: 'hint', text: 'Nada em curso.' }));
+    if (!rows.length) rows.push(h('li', { class: 'hint', text: 'Nothing in progress.' }));
     rows.forEach(r => ul.append(r));
     const active = jobs.filter(j => j.status === 'queued' || j.status === 'converting').length + uploads.filter(u => !u.done && !u.error).length;
     const b = $('#jobs-badge'); b.hidden = !active; b.textContent = active;
@@ -491,7 +517,7 @@
 
   function renderLibrary() {
     const ul = $('#library'); ul.textContent = '';
-    if (!media.length) ul.append(h('li', { class: 'hint', text: 'A biblioteca está vazia.' }));
+    if (!media.length) ul.append(h('li', { class: 'hint', text: 'The library is empty.' }));
     for (const m of media) {
       const users = cfg ? cfg.layers.filter(l => l.video === m.name || l.mask === m.name).map(l => l.name) : [];
       const img = m.kind === 'video' ? thumbUrl(m) : maskUrl(m.name);
@@ -499,25 +525,25 @@
         m.kind === 'mask' ? h('div', { class: 'thumb mk' }, maskPreview(m.name))
           : h('div', { class: 'thumb', style: `background-image:url("${img}")` }),
         h('div', { class: 'info' }, h('div', { class: 'nm', text: m.name }),
-          h('div', { class: 'sub', text: `${m.kind === 'video' ? `vídeo ${m.width}×${m.height}` : 'máscara'} · ${MB(m.size)}${users.length ? ' · em uso: ' + users.join(', ') : ''}` })),
+          h('div', { class: 'sub', text: `${m.kind === 'video' ? `video ${m.width}×${m.height}` : 'mask'} · ${MB(m.size)}${users.length ? ' · in use: ' + users.join(', ') : ''}` })),
         h('div', { class: 'btns' },
-          h('button', { text: 'Renomear', onclick: () => renameMedia(m) }),
-          h('button', { class: 'danger', text: 'Apagar', onclick: () => deleteMedia(m, users) }))));
+          h('button', { text: 'Rename', onclick: () => renameMedia(m) }),
+          h('button', { class: 'danger', text: 'Delete', onclick: () => deleteMedia(m, users) }))));
     }
   }
 
   async function renameMedia(m) {
     const ext = m.name.slice(m.name.lastIndexOf('.'));
-    const to = prompt('Novo nome (sem a extensão):', m.name.slice(0, -ext.length));
+    const to = prompt('New name (without the extension):', m.name.slice(0, -ext.length));
     if (!to || !to.trim()) return;
     const r = await api(`/api/media/${encodeURIComponent(m.name)}/rename`, { name: to });
-    if (!r.ok) toast((r.json && r.json.error) || 'Não foi possível renomear');
+    if (!r.ok) toast((r.json && r.json.error) || 'Could not rename');
   }
   async function deleteMedia(m, users) {
-    const aviso = users.length ? `“${m.name}” está em uso nas layers: ${users.join(', ')}.\nApagar mesmo assim? (as layers ficam sem ficheiro)` : `Apagar “${m.name}”?`;
+    const aviso = users.length ? `“${m.name}” is used by these layers: ${users.join(', ')}.\nDelete anyway? (the layers will be left without a file)` : `Delete “${m.name}”?`;
     if (!confirm(aviso)) return;
     const r = await api(`/api/media/${encodeURIComponent(m.name)}?force=1`, undefined, 'DELETE');
-    if (!r.ok) toast((r.json && r.json.error) || 'Não foi possível apagar');
+    if (!r.ok) toast((r.json && r.json.error) || 'Could not delete');
   }
 
   $('#btn-media').addEventListener('click', () => { refreshMedia(); renderQueue(); renderLibrary(); mdlg.showModal(); });
@@ -543,8 +569,8 @@
     if (!debugOn) return;
     const p = m.player;
     dbg.textContent = '';
-    const line1 = p ? [span('', 'FPS '), h('b', { text: p.fps.toFixed(0) }), span('', '  perdidos '), span(p.recent > 0 ? 'warn' : '', `${p.recent}`), span('off', ` (10 s) / ${p.dropped}`)]
-      : [span('off', 'player sem resposta')];
+    const line1 = p ? [span('', 'FPS '), h('b', { text: p.fps.toFixed(0) }), span('', '  dropped '), span(p.recent > 0 ? 'warn' : '', `${p.recent}`), span('off', ` (10 s) / ${p.dropped}`)]
+      : [span('off', 'player not responding')];
     dbg.append(
       ...line1,
       '\n',
@@ -557,7 +583,7 @@
     try { localStorage.setItem('debug', on ? '1' : '0'); } catch {}
     dbtn.classList.toggle('on', on); dbtn.setAttribute('aria-pressed', on);
     dbg.hidden = !on;
-    if (on) { dbg.textContent = 'a medir…'; dbg.className = ''; }
+    if (on) { dbg.textContent = 'measuring…'; dbg.className = ''; }
     if (ws && ws.readyState === 1) ws.send(JSON.stringify({ type: 'subscribe', stats: on }));
   }
   dbtn.addEventListener('click', () => setDebug(!debugOn));
@@ -572,8 +598,8 @@
     const r = await api('/api/login', { pin: $('#login-pin').value });
     const msg = $('#login-msg');
     if (r.ok) { msg.textContent = ''; $('#login').hidden = true; start(); }
-    else if (r.status === 429) msg.textContent = `Demasiadas tentativas. Tenta daqui a ${r.json.retryAfter} s.`;
-    else msg.textContent = 'PIN errado.';
+    else if (r.status === 429) msg.textContent = `Too many attempts. Try again in ${r.json.retryAfter} s.`;
+    else msg.textContent = 'Wrong PIN.';
     $('#login-pin').value = '';
   });
 
@@ -583,6 +609,9 @@
     const t = $('#toast'); t.textContent = text; t.classList.add('show');
     clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), 3500);
   }
+
+  // ---------- versão (vem do servidor, de server/package.json) ----------
+  api('/api/info').then(r => { if (r.ok && r.json.version) $('#version').textContent = 'v' + r.json.version; }).catch(() => {});
 
   // ---------- arranque ----------
   let started = false;
