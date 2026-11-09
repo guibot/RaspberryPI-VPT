@@ -3,9 +3,11 @@
 #   ./kiosk on      a partir do próximo arranque
 #   ./kiosk off     volta ao arranque normal
 #   ./kiosk status  mostra o estado
-# Só cria/apaga ~/.config/labwc/autostart. Nunca toca em /etc.
+# Cria/apaga ~/.config/labwc/autostart e, para o rato nunca aparecer, um tema de cursor invisível
+# (~/.local/share/icons/video-player-invisible + ~/.config/labwc/environment.d/video-player-kiosk.env). Nunca toca em /etc.
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 FILE="$HOME/.config/labwc/autostart"
+ENVF="$HOME/.config/labwc/environment.d/video-player-kiosk.env"
 MARK="# gerido por ./kiosk"
 managed() { [ -f "$FILE" ] && grep -q "$MARK" "$FILE"; }
 case "$1" in
@@ -13,10 +15,13 @@ case "$1" in
     if [ -f "$FILE" ] && ! managed; then echo "Já existe um $FILE que não foi criado por este script; não mexo nele." >&2; exit 1; fi
     mkdir -p "$(dirname "$FILE")"
     printf '%s\n# Apagar este ficheiro (ou ./kiosk off) repõe o arranque normal.\n%s/deploy/kiosk-session.sh &\n' "$MARK" "$ROOT" > "$FILE"
-    echo "kiosk LIGADO: no próximo arranque o Pi abre direto no player."
+    mkdir -p "$(dirname "$ENVF")"
+    "$ROOT/deploy/invisible-cursor.sh" install
+    printf '%s\nXCURSOR_THEME=video-player-invisible\n' "$MARK" > "$ENVF"
+    echo "kiosk LIGADO: no próximo arranque o Pi abre direto no player (com o rato escondido)."
     echo "Para voltar ao normal: $ROOT/kiosk off" ;;
   off)
-    if managed; then rm -f "$FILE"; echo "kiosk DESLIGADO: o próximo arranque é normal."
+    if managed; then rm -f "$FILE" "$ENVF"; "$ROOT/deploy/invisible-cursor.sh" remove; echo "kiosk DESLIGADO: o próximo arranque é normal."
     elif [ -f "$FILE" ]; then echo "$FILE existe mas não é nosso; não mexo nele." >&2; exit 1
     else echo "kiosk já estava desligado."; fi ;;
   status|"")

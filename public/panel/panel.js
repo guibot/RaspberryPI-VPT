@@ -361,8 +361,10 @@
 
   function fitPreview() {
     const { width: W, height: H } = cfg.output;
-    const desktop = matchMedia('(min-width: 900px)').matches;
-    const maxH = desktop ? wrap.clientHeight : innerHeight * 0.4;
+    // Computador e telemóvel deitado: a pré-visualização ocupa a área que tem. Telemóvel de pé: uma fração do ecrã
+    // (menos a desenhar máscaras, porque a barra de ferramentas também precisa de espaço).
+    const fill = matchMedia('(min-width: 900px) and (min-height: 521px), (max-height: 520px) and (orientation: landscape)').matches;
+    const maxH = fill ? wrap.clientHeight : innerHeight * (editor.active ? 0.32 : 0.38);
     scale = Math.max(0.05, Math.min(wrap.clientWidth / W, maxH / H));
     preview.style.width = W * scale + 'px'; preview.style.height = H * scale + 'px';
     pstage.style.width = W + 'px'; pstage.style.height = H + 'px';

@@ -176,8 +176,12 @@ dialog .field + .field { margin-top: 8px; }
 
 /* ---- media ---- */
 .badge { background: var(--accent); color: var(--on-accent); border-radius: 9px; padding: 0 6px; font: 600 10px var(--mono); line-height: 16px; }
-#media-dlg { width: min(600px, calc(100vw - 24px)); max-height: calc(100vh - 24px); }
-.dlg-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+/* 100vh no telemóvel inclui a zona por baixo da barra do browser: a janela ficava maior que o ecrã e cortada em cima.
+   dvh é a altura visível de facto; o cabeçalho fica preso no topo para o "Close" estar sempre à mão. */
+dialog { max-height: calc(100vh - 24px); max-height: calc(100dvh - 24px - env(safe-area-inset-top) - env(safe-area-inset-bottom)); overscroll-behavior: contain; }
+#media-dlg { width: min(600px, calc(100vw - 24px)); padding-top: 0; }
+.dlg-head { display: flex; align-items: center; justify-content: space-between; margin: 0 -16px 12px; padding: 12px 16px;
+  position: sticky; top: 0; z-index: 2; background: var(--surface); border-bottom: 1px solid var(--border); }
 .dlg-head h2 { margin: 0; }
 #dropzone { border: 1px dashed var(--border2); border-radius: 10px; padding: 14px; text-align: center; display: grid; gap: 8px; justify-items: center; font-size: 13px; color: var(--text2); transition: border-color .12s, background .12s; }
 #dropzone p { margin: 0; }
@@ -194,18 +198,41 @@ ul.plain { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 6p
 .mrow .btns button { padding: 0 9px; font-size: 12px; }
 .qrow { grid-template-columns: 1fr auto; padding: 8px 10px; }
 
-/* ---- telemóvel ---- */
-@media (max-width: 899px) {
-  main { display: flex; flex-direction: column; overflow-y: auto; -webkit-overflow-scrolling: touch; }
-  main > section { overflow: visible; border: 0 !important; background: transparent !important; padding: 12px; }
-  #col-preview { order: -1; flex: none; position: sticky; top: 0; z-index: 10; background: var(--bg); padding: 8px 12px 0; border-bottom: 1px solid var(--border); }
+/* ---- telemóvel ----
+   A pré-visualização e os separadores ficam fixos; só o painel do separador ativo faz scroll.
+   Assim nada passa por baixo da pré-visualização (antes ela era "sticky" e o conteúdo deslizava por trás). */
+@media (max-width: 899px), (max-height: 520px) {
+  #app { height: 100dvh; }
+  header { gap: 2px; padding: 0 6px 0 max(8px, env(safe-area-inset-left)); padding-right: max(6px, env(safe-area-inset-right)); }
+  header button.ghost { padding: 0 8px; }
+  .version { display: none; }
+  .status { margin-left: 6px; }
+  .status span { display: none; }                 /* só a bolinha de estado */
+  main { display: flex; flex-direction: column; overflow: hidden; }
+  main > section { border: 0 !important; background: transparent !important; padding: 12px max(12px, env(safe-area-inset-left)) calc(16px + env(safe-area-inset-bottom)); }
+  #col-preview { order: -1; flex: none; padding: 8px 12px 8px; overflow: visible; }
   #preview-wrap { display: block; flex: none; }
   #preview { margin: 0 auto; }
-  #tabs { display: grid; grid-template-columns: 1fr 1fr; padding: 4px 0 0; }
+  #tabs { order: 0; flex: none; display: grid; grid-template-columns: 1fr 1fr; border-bottom: 1px solid var(--border); background: var(--surface); }
   #tabs button { border: 0; border-bottom: 2px solid transparent; border-radius: 0; font: 11px var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--text3); }
   #tabs button.on { color: var(--accent); border-bottom-color: var(--accent); }
+  #col-layers, #col-props { order: 1; flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
   body[data-tab="layers"] #col-props { display: none; }
   body[data-tab="props"] #col-layers { display: none; }
   #col-props { padding-top: 0; }
+  #col-layers .bar h2 { visibility: hidden; }     /* o separador já diz "Layers" */
   .li-thumb { width: 56px; }
+  /* editor de máscaras compacto: menos altura roubada ao painel */
+  #mask-tools { gap: 5px; padding-top: 8px; }
+  #mask-tools .me-row button, #mask-tools .seg button { height: 36px; }
+  #mask-tools .hint { font-size: 11px; }
+}
+/* telemóvel deitado: pré-visualização à esquerda, painel à direita */
+@media (max-height: 520px) and (orientation: landscape) {
+  main { display: grid; grid-template-columns: minmax(0, 1fr) minmax(300px, 40%); grid-template-rows: auto minmax(0, 1fr); }
+  #col-preview { grid-column: 1; grid-row: 1 / 3; display: flex; flex-direction: column; min-height: 0; overflow-y: auto; border-right: 1px solid var(--border) !important;
+    padding-left: max(12px, env(safe-area-inset-left)); padding-bottom: calc(8px + env(safe-area-inset-bottom)); }
+  #preview-wrap { display: flex; flex: 1; min-height: 120px; }
+  #tabs { grid-column: 2; grid-row: 1; }
+  #col-layers, #col-props { grid-column: 2; grid-row: 2; padding-right: max(12px, env(safe-area-inset-right)); }
 }

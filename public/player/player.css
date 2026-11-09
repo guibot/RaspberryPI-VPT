@@ -1,4 +1,6 @@
-html, body { margin: 0; width: 100%; height: 100%; background: #000; overflow: hidden; cursor: none; }
+html, body { margin: 0; width: 100%; height: 100%; background: #000; overflow: hidden; }
+/* O rato nunca se vê, nem por cima de vídeos ou de elementos com o seu próprio cursor. */
+*, *::before, *::after { cursor: none !important; }
 
 /* O palco tem o tamanho lógico da saída (ex.: 1920x1080) e é escalado para caber na janela. */
 #stage { position: absolute; left: 0; top: 0; transform-origin: 0 0; background: #000; overflow: hidden; }
