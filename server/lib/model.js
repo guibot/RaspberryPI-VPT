@@ -77,7 +77,8 @@ function normalize(c) {
   }
   const cv = c.convert || {};
   const okSize = CONVERT_SIZES.some(([w, h]) => w === cv.maxWidth && h === cv.maxHeight);
-  const convert = { maxWidth: okSize ? cv.maxWidth : 640, maxHeight: okSize ? cv.maxHeight : 480, fps: CONVERT_FPS.includes(cv.fps) ? cv.fps : 30 };
+  const convert = { maxWidth: okSize ? cv.maxWidth : 640, maxHeight: okSize ? cv.maxHeight : 480, fps: CONVERT_FPS.includes(cv.fps) ? cv.fps : 30,
+    process: cv.process !== false };      // false = guarda os vídeos como vêm (já comprimidos, ex.: HandBrake)
   return {
     version: SCHEMA_VERSION,
     rev: Number.isInteger(c.rev) && c.rev >= 0 ? c.rev : 0,    // sobe a cada alteração (sincronização)
@@ -162,7 +163,7 @@ function applyOp(config, op) {
     }
     case 'setConvert': {
       if (!CONVERT_SIZES.some(([w, h]) => w === op.width && h === op.height) || !CONVERT_FPS.includes(op.fps)) throw new OpError('definições de conversão inválidas');
-      c.convert = { maxWidth: op.width, maxHeight: op.height, fps: op.fps };
+      c.convert = { maxWidth: op.width, maxHeight: op.height, fps: op.fps, process: op.process !== false };
       break;
     }
     case 'setPin':

@@ -9,9 +9,12 @@ const { spawn, execFile } = require('child_process');
 const { EventEmitter } = require('events');
 
 const HDR_TRANSFERS = new Set(['smpte2084', 'arib-std-b67']);
+// Sem conversão só se aceita o que o Chromium toca e o servidor lista como vídeo; o resto é convertido na mesma.
+const COPY_EXT = new Set(['.mp4', '.m4v', '.mov', '.webm']);
+const COPY_CODECS = new Set(['h264', 'vp8', 'vp9', 'av1']);
 
 const probe = file => new Promise((resolve, reject) =>
-  execFile('ffprobe', ['-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=width,height,color_transfer:format=duration', '-of', 'json', file],
+  execFile('ffprobe', ['-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=width,height,color_transfer,codec_name:format=duration', '-of', 'json', file],
     { timeout: 30000 }, (err, out) => { if (err) return reject(err); try { resolve(JSON.parse(out)); } catch (e) { reject(e); } }));
 
 // Constrói a cadeia de filtros. Exportada para os testes.
@@ -67,9 +70,9 @@ class Converter extends EventEmitter {
     return true;
   }
 
-  uniqueName(base) {
-    let name = base + '.mp4', n = 2;
-    while (fs.existsSync(path.join(this.mediaDir, name))) name = `${base}-${n++}.mp4`;
+  uniqueName(base, ext = '.mp4') {
+    let name = base + ext, n = 2;
+    while (fs.existsSync(path.join(this.mediaDir, name))) name = `${base}-${n++}${ext}`;
     return name;
   }
 
@@ -92,6 +95,16 @@ class Converter extends EventEmitter {
       if (!st) throw new Error('o ficheiro não tem vídeo');
       const duration = Number(info.format && info.format.duration) || 0;
       const settings = this.getSettings();
+      const ext = path.extname(job.name).toLowerCase();
+      if (settings.process === false && COPY_EXT.has(ext) && COPY_CODECS.has(st.codec_name)) {
+        const base = path.basename(job.name, ext).replace(/^\.+/, '') || 'video';
+        const final = this.uniqueName(base, ext);                 // guarda o ficheiro tal como foi enviado
+        fs.renameSync(job.src, path.join(this.mediaDir, final));
+        job.status = 'done'; job.progress = 100; job.result = final;
+        this._emit(); this.emit('media', final);
+        setTimeout(() => { this.jobs = this.jobs.filter(x => x !== job); this._emit(); }, 30000).unref();
+        return;
+      }
       const vf = buildFilters(settings, HDR_TRANSFERS.has(st.color_transfer));
       const args = ['-v', 'error', '-y', '-i', job.src, '-map', '0:v:0', '-an', '-sn', '-dn', '-vf', vf,
         '-fps_mode', 'cfr', '-c:v', 'libx264', '-preset', 'medium', '-crf', '23', '-profile:v', 'high', '-pix_fmt', 'yuv420p',

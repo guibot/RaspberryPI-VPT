@@ -120,3 +120,13 @@ test('operações inválidas lançam OpError', () => {
   assert.throws(() => applyOp(base(), null), OpError);
   assert.throws(() => applyOp(base(), { op: 'fazerCafe' }), OpError);
 });
+
+test('conversão de vídeos: ligada por defeito e pode ser desligada', () => {
+  let c = base();
+  assert.equal(c.convert.process, true);
+  c = applyOp(c, { op: 'setConvert', width: 800, height: 600, fps: 25, process: false });
+  assert.deepEqual(c.convert, { maxWidth: 800, maxHeight: 600, fps: 25, process: false });
+  assert.equal(normalize(c).convert.process, false);
+  c = applyOp(c, { op: 'setConvert', width: 640, height: 480, fps: 30 });
+  assert.equal(c.convert.process, true);
+});

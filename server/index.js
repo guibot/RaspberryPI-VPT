@@ -26,7 +26,7 @@ const media = new Media(path.join(DATA_DIR, 'media'), path.join(DATA_DIR, 'thumb
 
 const converter = new Converter({
   uploadDir: path.join(DATA_DIR, 'uploads'), mediaDir: media.dir,
-  getSettings: () => { const c = store.get().convert; return { maxWidth: c.maxWidth, maxHeight: c.maxHeight, fps: c.fps }; },
+  getSettings: () => { const c = store.get().convert; return { maxWidth: c.maxWidth, maxHeight: c.maxHeight, fps: c.fps, process: c.process }; },
 });
 converter.recover();
 

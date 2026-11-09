@@ -417,12 +417,15 @@
     if (!cfg) return;
     $('#set-res').value = `${cfg.output.width}x${cfg.output.height}`;
     $('#set-conv-size').value = `${cfg.convert.maxWidth}x${cfg.convert.maxHeight}`; $('#set-conv-fps').value = String(cfg.convert.fps);
+    $('#set-conv-on').checked = cfg.convert.process !== false;
+    $('#set-conv-size').disabled = $('#set-conv-fps').disabled = cfg.convert.process === false;
     $('#pin-state').textContent = cfg.hasPin ? 'O painel está protegido por PIN.' : 'Sem PIN: qualquer pessoa na rede local pode controlar o ecrã.';
     $('#btn-pin-remove').hidden = !cfg.hasPin; $('#btn-logout').hidden = !cfg.hasPin;
   }
   $('#btn-settings').addEventListener('click', () => { $('#set-msg').textContent = ''; $('#set-pin').value = ''; syncSettings(); dlg.showModal(); });
   $('#set-res').addEventListener('change', e => { const [w, hh] = e.target.value.split('x').map(Number); sendOp({ op: 'setOutput', width: w, height: hh }); });
-  const sendConvert = () => { const [w, hh] = $('#set-conv-size').value.split('x').map(Number); sendOp({ op: 'setConvert', width: w, height: hh, fps: +$('#set-conv-fps').value }); };
+  const sendConvert = () => { const [w, hh] = $('#set-conv-size').value.split('x').map(Number); sendOp({ op: 'setConvert', width: w, height: hh, fps: +$('#set-conv-fps').value, process: $('#set-conv-on').checked }); };
+  $('#set-conv-on').addEventListener('change', sendConvert);
   $('#set-conv-size').addEventListener('change', sendConvert);
   $('#set-conv-fps').addEventListener('change', sendConvert);
   async function savePin(pin) {

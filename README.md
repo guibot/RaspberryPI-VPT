@@ -41,7 +41,7 @@ The address and a QR code also show on the output screen when there are no layer
 - **Preview**: drag a layer to move it, drag its 4 handles for the corner pin.
 - **Media**: upload videos and PNGs (phone gallery or drag and drop). Videos are converted automatically
   (H.264, max 640×480 or 800×600, constant fps, no audio, HDR to SDR). PNGs become masks.
-- **Settings**: output resolution (1920×1080 or 1280×720), conversion size and fps, optional PIN.
+- **Settings**: output resolution (1920×1080 or 1280×720), conversion size and fps, an option to skip conversion (keep videos as uploaded, e.g. already compressed with HandBrake), optional PIN.
 - **Debug**: live FPS, dropped frames, CPU, GPU and temperature.
 
 There is **no PIN by default**: anyone on your network can control the screen. Set one in Settings.

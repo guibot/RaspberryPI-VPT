@@ -103,6 +103,12 @@ convertidos com ffmpeg para H.264 yuv420p, no máximo 640×480 (ou 800×600), ma
 ampliar, fps constante (25 ou 30), sem áudio, `+faststart` e GOP curto sem B-frames (ajuda o loop).
 O HDR passa para SDR. Os PNGs entram diretamente como máscaras.
 
+**Sem conversão:** nas Definições podes desligar *Converter vídeos ao enviar* (por exemplo se já comprimiste e
+redimensionaste no HandBrake). Os vídeos H.264, VP8, VP9 ou AV1 em `.mp4`, `.m4v`, `.mov` ou `.webm` entram tal
+como estão, sem reencodar, o que é instantâneo e sem perdas. Outros formatos (HEVC, `.mkv`, `.avi`...) são
+convertidos na mesma, porque o Chromium não os toca. Neste modo o tamanho e os fps das Definições não se aplicam:
+usa vídeos já no tamanho e fps finais (o ideal é um fps constante, sem áudio é opcional).
+
 As máscaras podem ser formas de qualquer cor sobre fundo **transparente** (modo *Alpha*, o normal), ou
 imagens planas a preto e branco (modo *Luminância*: branco = visível).
 

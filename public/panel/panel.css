@@ -109,6 +109,8 @@ button.ghost.on { color: var(--accent); border-color: var(--accent); background:
 .group > .gt { margin-bottom: 2px; }
 .g2 { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
 .field { display: grid; gap: 4px; font: 11px var(--mono); color: var(--text3); }
+.field.check { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text); }
+.field.check input { width: auto; }
 .field input[type=text], .field select, #set-pin { height: var(--h); padding: 0 10px; background: var(--surface2); border: 1px solid var(--border); border-radius: 7px; font-size: 13px; width: 100%; }
 .field input:focus, .field select:focus, #set-pin:focus { border-color: var(--accent); outline: 0; }
 .field select { font-family: var(--mono); font-size: 12px; }
