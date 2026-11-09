@@ -85,7 +85,7 @@ Se estiveres em kiosk e precisares do ambiente de trabalho sem teclado, faz SSH 
 
 ## Usar o painel
 
-- **Layers:** `+ Layer` adiciona. ▲ ▼ reordenam (topo da lista = layer de cima), ⧉ duplica, ✕ apaga, ● mostra/esconde.
+- **Layers:** `+ Layer` adiciona. arrasta a pega ⋮⋮ à esquerda (ou usa ▲ ▼) para reordenar (topo da lista = layer de cima), ⧉ duplica, ✕ apaga, ● mostra/esconde.
 - **Propriedades:** vídeo, máscara (e modo), posição, escala e corner pin. Nos campos numéricos arrasta na
   horizontal para mudar o valor, toca/clica para escrever, e usa ↑↓ para afinar (Shift = 10×).
 - **Pré-visualização:** arrasta as 4 pegas para o corner pin; arrasta a layer para a mover; toca numa layer

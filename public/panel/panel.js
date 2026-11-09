@@ -130,7 +130,9 @@
 
   // ---------- lista de layers ----------
   let listSig = '';
+  let reorder = null;             // arrastar uma layer na lista para mudar a ordem
   function renderList() {
+    if (reorder) { reorder.stale = true; return; }          // não reconstruir a lista a meio de um arrasto
     const ul = $('#layer-list');
     const sig = JSON.stringify([cfg.layers.map(l => [l.id, l.name, l.visible, l.video, l.mask, l.vmask]), sel, mediaSig()]);
     if (sig === listSig) return;
@@ -142,6 +144,7 @@
       const m = mediaByName(l.video);
       const li = h('li', { class: 'li' + (l.id === sel ? ' sel' : '') + (l.visible ? '' : ' hidden-layer') },
         h('div', { class: 'li-main', onclick: () => select(l.id) },
+          h('div', { class: 'li-grip', title: 'Drag to reorder', 'aria-label': 'Drag to reorder', text: '⋮⋮', onpointerdown: e => startReorder(e, l.id) }),
           h('div', { class: 'li-thumb', style: m ? `background-image:url("${thumbUrl(m)}")` : '' }),
           l.vmask || l.mask ? h('div', { class: 'li-mask', title: l.vmask ? 'drawn mask' : l.mask }, maskPreviewCss(layerMaskCss(l))) : null,
           h('div', { class: 'li-name', text: l.name }),
@@ -154,6 +157,48 @@
         h('button', { class: 'danger', text: '✕', title: 'Delete', 'aria-label': 'Delete', onclick: () => { if (confirm(`Delete layer “${l.name}”?`)) sendOp({ op: 'removeLayer', id: l.id }); } })));
       ul.append(li);
     });
+  }
+
+  // Arrastar pela pega: a layer segue o dedo/rato e uma linha mostra onde vai ficar. Ao largar, envia moveLayer.
+  // O topo da lista é a layer de cima, por isso a posição p na lista (0 = topo) corresponde ao índice n-1-p do array.
+  function startReorder(e, id) {
+    if (e.button > 0 || reorder) return;
+    const ul = $('#layer-list'), items = [...ul.children].filter(x => x.classList.contains('li'));
+    const li = e.currentTarget.closest('.li'), from = items.indexOf(li);
+    if (from < 0 || items.length < 2) return;
+    e.preventDefault(); e.stopPropagation();
+    const grip = e.currentTarget; grip.setPointerCapture(e.pointerId);
+    const rects = items.map(x => x.getBoundingClientRect());
+    const mid = rects.map(r => (r.top + r.bottom) / 2);
+    const line = h('div', { class: 'drop-line' }); ul.append(line);
+    reorder = { id, stale: false };
+    li.classList.add('dragging'); ul.classList.add('reordering');
+    let to = from;
+    const place = () => {                                    // linha entre o item to-1 e to (a ficar na posição "to" final)
+      const ref = items.filter((_, k) => k !== from);
+      const top = to === 0 ? rects[0].top : ref[to - 1].getBoundingClientRect().bottom;
+      line.style.top = (top - ul.getBoundingClientRect().top + ul.scrollTop) + 'px';
+    };
+    place();
+    const move = ev => {
+      li.style.transform = `translateY(${ev.clientY - e.clientY}px)`;
+      const others = items.map((_, k) => k).filter(k => k !== from);
+      to = others.filter(k => mid[k] < ev.clientY).length;      // nº de itens (sem o arrastado) acima do ponteiro
+      place();
+    };
+    const end = ev => {
+      grip.removeEventListener('pointermove', move); grip.removeEventListener('pointerup', end); grip.removeEventListener('pointercancel', end);
+      const cancel = ev.type === 'pointercancel';
+      line.remove(); li.classList.remove('dragging'); ul.classList.remove('reordering'); li.style.transform = '';
+      const stale = reorder.stale; reorder = null;
+      if (!cancel && to !== from) {
+        const n = cfg.layers.length, idx = n - 1 - to, cur = cfg.layers.findIndex(x => x.id === id);
+        if (cur >= 0) { const [m] = cfg.layers.splice(cur, 1); cfg.layers.splice(idx, 0, m); }   // já se vê; o servidor confirma
+        sendOp({ op: 'moveLayer', id, index: idx });
+        listSig = ''; renderAll();
+      } else if (stale) { listSig = ''; renderList(); }
+    };
+    grip.addEventListener('pointermove', move); grip.addEventListener('pointerup', end); grip.addEventListener('pointercancel', end);
   }
 
   function select(id) { if (id !== sel) editor.stop(); sel = id; renderAll(); }
@@ -274,9 +319,9 @@
         l.vmask && l.mask ? h('p', { class: 'hint', text: 'The drawn mask replaces the PNG chosen above.' }) : null,
         numRow('Scale', [0.1, 5], LIM.maskScale, 0.01, () => L().maskScale, v => patch({ maskScale: v }))),
       group('Video',
-        numRow('Scale', [0.1, 5], LIM.videoScale, 0.01, () => L().videoScale, v => patch({ videoScale: v })),
         g2(numRow('Offset X', [-500, 500], LIM.videoOffset, 1, () => L().videoOffsetX, v => patch({ videoOffsetX: v })),
-           numRow('Offset Y', [-500, 500], LIM.videoOffset, 1, () => L().videoOffsetY, v => patch({ videoOffsetY: v })))),
+           numRow('Offset Y', [-500, 500], LIM.videoOffset, 1, () => L().videoOffsetY, v => patch({ videoOffsetY: v }))),
+        numRow('Scale', [0.1, 5], LIM.videoScale, 0.01, () => L().videoScale, v => patch({ videoScale: v }))),
       group('Corner pin (px)',
         h('div', { class: 'pins' }, PIN_NAMES.map((t, i) =>
           h('div', { class: 'pin-block' }, h('b', { text: t }),

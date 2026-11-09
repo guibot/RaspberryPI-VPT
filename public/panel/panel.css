@@ -70,6 +70,13 @@ main > section { overflow: auto; min-height: 0; padding: 12px; }
 .li:hover { border-color: var(--border2); }
 .li.sel { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
 .li-main { display: flex; align-items: center; gap: 9px; padding: 6px 6px 6px 6px; cursor: pointer; }
+.li-grip { width: 22px; align-self: stretch; display: grid; place-items: center; flex: none; color: var(--text3); font: 13px var(--mono); letter-spacing: -2px;
+  cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none; margin: -6px 0 -6px -6px; border-radius: 9px 0 0 9px; }
+.li-grip:hover { color: var(--text); background: var(--accent-dim); }
+#layer-list { position: relative; }
+.li.dragging { position: relative; z-index: 5; opacity: .85; box-shadow: 0 6px 18px #0009; border-color: var(--accent); pointer-events: none; }
+#layer-list.reordering, #layer-list.reordering * { cursor: grabbing; }
+.drop-line { position: absolute; left: 0; right: 0; height: 3px; margin-top: -2px; border-radius: 2px; background: var(--accent); pointer-events: none; z-index: 6; }
 .li-thumb { width: 48px; aspect-ratio: 16 / 10; border-radius: 5px; background: #000 center / cover; flex: none; border: 1px solid var(--border); }
 .li-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
 .li-mask, .mrow .thumb.mk { position: relative; background: #000; }
